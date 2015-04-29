@@ -63,6 +63,9 @@ Then, make a configuration file as follows: *config/signage-device.conf*
 
 ````perl
 {	
+	# Startup (Optional)
+	startup_wait_sec => 5, # Or undef
+
 	# Signage browser
 	chromium_bin_path => 'chromium',
 	signage_page_url => 'http://example.com/',
@@ -79,7 +82,7 @@ Then, make a configuration file as follows: *config/signage-device.conf*
 	git_branch_name => 'master',
 	git_bin_path => '/usr/bin/git',
 	
-	# Sleep (Optional)
+	# Sleep of display (Optional)
 	sleep_begin_time => '21:59', # Or undef 
 	sleep_end_time => '07:00', # Or undef
 }
