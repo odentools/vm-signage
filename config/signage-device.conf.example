@@ -1,0 +1,21 @@
+{
+	# Control server
+	control_server_ws_url => 'ws://example.heroku.com/',
+
+	# Signage browser
+	chromium_bin_path => 'chromium',
+	signage_page_url => 'http://example.com/',
+	
+	# Proxy
+	http_proxy => undef,
+	
+	# Auto updating with using Git
+	git_cloned_dir_path => '/home/pi/vm-signage/',
+	git_repo_name => 'origin',
+	git_branch_name => 'master',
+	git_bin_path => 'git',
+	
+	# Sleep
+	sleep_begin_time => '21:59',
+	sleep_end_time => '07:00',
+}

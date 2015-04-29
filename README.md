@@ -3,20 +3,30 @@ A simple digital signage kit for Raspberry Pi (Wheezy).
 
 ## Components
 
-### control-server
+This kit is composed with 2 components.
 
-### signage-device
+### Signage-device script
+
+The signage-device script will be used by deployed on your Raspberry Pi.
+It makes the Raspberry Pi metamorphoses into an digital-signage device.
+
+In the case of normally, the Raspberry Pi should be connecting with any HDMI display or VGA display.
+
+### Control-server script
+
+The control-server script will be used by deployed on [Heroku](https://www.heroku.com/) or your any server.
+
+You can also use the signage-device as standalone; Actually, using of the control-server is optional, but it allows auto updating of your signage.
 
 ## Files
-* Procfile - File for control-server (Use for working on Heroku)
-* app.psgi - File for control-server (Use for working on Heroku)
-* control-server.pl - Control-server
+* Procfile - File for control-server (for deploying to Heroku)
+* control-server.pl - Control-server script
 * cpanfile - Definition of dependent modules
-* signage-device.pl - Signage script for Raspberry Pi
+* signage-device.pl - Signage-device script (for Raspberry Pi)
 
 ## Installation
 
-### control-server on Heroku
+### Control-server on Heroku
 
 Firstly, signup on the [Heroku](https://www.heroku.com/). And install the [Heroku Toolbelt](https://toolbelt.heroku.com/) on your computer.
 
@@ -28,7 +38,7 @@ Then, please run the following commands on your computer:
     $ git push heroku master
     $ heroku open
 
-### signage-device on Raspberry Pi
+### Signage-device on Raspberry Pi
 
 Please run the following commands on your Raspberry Pi:
 
@@ -40,7 +50,7 @@ Then, write a configuration file:
 config/signage-device.conf
 
 	{
-		# Control server
+		# Control server (URL of deployed server on Heroku)
 		control_server_ws_url => 'ws://FOO.heroku.com/',
 
 		# Signage browser
@@ -51,7 +61,7 @@ config/signage-device.conf
 		http_proxy => 'http://proxy.example.net:8080', # Or undef
 		
 		# Auto updating with using Git
-		git_cloned_dir_path => '/path/to/signage/',
+		git_cloned_dir_path => '/home/pi/vm-signage/',
 		git_repo_name => 'origin',
 		git_branch_name => 'master',
 		git_bin_path => '/usr/bin/git',
@@ -63,7 +73,7 @@ config/signage-device.conf
 
 ## License
 
-Copyright (C) 2013 OdenTools Project (https://sites.google.com/site/odentools/), Masanori Ohgita (http://ohgita.info/).
+Copyright (C) 2015 OdenTools Project (https://sites.google.com/site/odentools/), Masanori Ohgita (http://ohgita.info/).
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License version 3 (GPL v3).
 
