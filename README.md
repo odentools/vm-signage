@@ -16,7 +16,9 @@ In the case of normally, the Raspberry Pi should be connecting with any HDMI dis
 
 The control-server script will be used by deployed on [Heroku](https://www.heroku.com/) or your any server.
 
-You can also use the signage-device as standalone; Actually, using of the control-server is optional, but it allows auto updating of your signage.
+The control-server allows auto updating of signage when your any repository has pushed.
+However, whether to use of this function is optional;
+If you won't use it, you don't need to use the control-server.
 
 ## Files
 * Procfile - File for control-server (for deploying to Heroku)
@@ -94,6 +96,18 @@ After that, add the following line into the LXDE autostart file: *~/.config/lxse
 Finally, please reboot the Raspberry Pi. Let's enjoy :)
 
     $ sudo shutdown -r now
+
+### Add the webhook on GitHub
+
+To auto updating signage when any your any repository was pushed, 
+please register the following settings on the "Webhook" section of 
+"Settings - Webhooks & Services" page of the repository on GitHub.
+
+* Payload URL: https://example.heroku.com/github-webhook-receiver
+* Content type: application/json
+* Secret: (empty)
+* Which events would you like to trigger this webhook?: Just the push event
+* Active: (true)
 
 ## Hints
 
