@@ -40,36 +40,80 @@ Then, please run the following commands on your computer:
 
 ### Signage-device on Raspberry Pi
 
-Please run the following commands on your Raspberry Pi:
+Firstly, run the following commands on your Raspberry Pi:
 
-    $ sudo apt-get install chromium
+    $ sudo apt-get install perl git chromium x11-xserver-utils
     $ sudo cpan install Carton
+    $ cd ~
     $ git clone https://github.com/odentools/vm-signage.git
+    $ cd vm-signage/
+    $ carton install
 
-Then, write a configuration file: 
-config/signage-device.conf
+Then, make a script file as follows: *start.sh*
 
-	{
-		# Control server (URL of deployed server on Heroku)
-		control_server_ws_url => 'ws://FOO.heroku.com/',
+````bash
+#!/bin/bash
+cd ~/vm-signage
+carton exec -- perl signage-device.pl
+````
 
-		# Signage browser
-		chromium_bin_path => 'chromium',
-		signage_page_url => 'http://example.com/',
-		
-		# Proxy
-		http_proxy => 'http://proxy.example.net:8080', # Or undef
-		
-		# Auto updating with using Git
-		git_cloned_dir_path => '/home/pi/vm-signage/',
-		git_repo_name => 'origin',
-		git_branch_name => 'master',
-		git_bin_path => '/usr/bin/git',
-		
-		# Sleep
-		sleep_begin_time => '21:59',
-		sleep_end_time => '07:00',
-	}
+Then, make a configuration file as follows: *config/signage-device.conf*
+
+````perl
+{	
+	# Signage browser
+	chromium_bin_path => 'chromium',
+	signage_page_url => 'http://example.com/',
+	
+	# Proxy (Optional)
+	http_proxy => 'http://proxy.example.com:8080', # Or undef
+
+	# Control server (Optional; Websocket URL of deployed server)
+	control_server_ws_url => 'ws://example.herokuapp.com/', # Or undef
+
+	# Auto updating with using Git (Optional)
+	git_cloned_dir_path => '/home/pi/vm-signage/', # Or undef
+	git_repo_name => 'origin',
+	git_branch_name => 'master',
+	git_bin_path => '/usr/bin/git',
+	
+	# Sleep (Optional)
+	sleep_begin_time => '21:59', # Or undef 
+	sleep_end_time => '07:00', # Or undef
+}
+````
+
+(NOTE: If you won't use control-server, these parameters should be set the undef: "control_server_ws_url", "git_cloned_dir_path".)
+
+After that, add the following line into the LXDE autostart file: *~/.config/lxsession/LXDE-pi/autostart*
+
+````text
+@/bin/bash ~/vm-signage/start.sh
+````
+
+Finally, please reboot the Raspberry Pi. Let's enjoy :)
+
+    $ sudo shutdown -r now
+
+## Hints
+
+### How to disable sleeping of the HDMI display 
+
+Please edit following files.
+
+In the line that begin from @xscreensaver should be commented out.
+And add some @xset line.
+
+*/etc/xdg/lxsession/LXDE/autostart*
+
+    #@xscreensaver -no-splash
+
+*/etc/xdg/lxsession/LXDE-pi/autostart*
+
+    #@xscreensaver -no-splash
+    @xset s off
+    @xset -dpms
+    @xset s noblank
 
 ## License
 
