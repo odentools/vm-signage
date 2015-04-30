@@ -17,6 +17,8 @@ app->config(
 
 # Initialize clients hash
 our %clients = ();
+# Initialize repository revision
+our %stats = ();
 
 # WebSocket endpoint for push notification to signage device
 websocket '/notif' => sub {
@@ -30,8 +32,14 @@ websocket '/notif' => sub {
 	$clients{$client_id} = $s->tx;
 
 	# Set event handler
-	$s->on(message => sub { # Incomming message
-		my ($s, $message) = @_;
+	$s->on(json => sub { # Incomming message
+		my ($tx, $hash) = @_;
+		if (defined $hash->{cmd} && $hash->{cmd} eq 'get-latest-repo-rev') {
+			$tx->send({ json => {
+				cmd => $hash->{cmd},
+				repo_rev => $stats{repo_rev} || undef,
+			}});
+		}
 	});
 	$s->on(finish => sub { # Closed
 		my ($s, $code, $reason) = @_;
@@ -61,12 +69,14 @@ any '/github-webhook-receiver' => sub {
 		return;
 	}
 
+	# Save revision
+	$stats{repo_rev} = $payload->{after};
+
 	# Notify to clients
-	my $message = Mojo::JSON::encode_json({
-		cmd => 'repository-updated',
-	});
 	foreach my $client_id (keys %clients) {
-		$clients{$client_id}->send_message($message);
+		$clients{$client_id}->send({ json => {
+			cmd => 'repository-updated',
+		}});
 	}
 
 	$s->render(text => 'OK');

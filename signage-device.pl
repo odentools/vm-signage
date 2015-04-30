@@ -22,7 +22,7 @@ if (defined $config{startup_wait_sec}) {
 }
 exec_signage();
 
-# Connect to control server
+# Connect to control server with using WebSocket
 my $ua;
 my $ws_url = $config{control_server_ws_url} || undef;
 if (defined $ws_url) {
@@ -39,21 +39,42 @@ if (defined $ws_url) {
 		}
 		log_i("WebSocket connected");
 
+		# Check latest revision of repository
+		$tx->send({ json => {
+				cmd => 'get-latest-repo-rev',
+		}});
+
 		# Set event handler
 		$tx->on(json => sub { # Incomming message
 			my ($tx, $hash) = @_;
-			if ($hash->{cmd} eq 'repository-updated') {
-				print "[INFO] Repository updated\n";
+			if ($hash->{cmd} eq 'repository-updated') { # On repository updated
+				log_i("Repository updated");
 				# Update repository
 				update_repo();
-				# Disconnect
-				$tx->finish;
 				# Restart myself
+				$tx->finish;
 				wait_sec(5);
 				restart_myself();
 				exit;
+			} elsif ($hash->{cmd} eq 'get-latest-repo-rev' && exists $hash->{repo_rev}) { # On revision received
+				my $local_rev = get_repo_rev();
+				log_i("local = $local_rev, remote = $hash->{repo_rev}");
+				if (defined $hash->{repo_rev} && $hash->{repo_rev} ne $local_rev) {
+					log_i("Repository was old: $local_rev");
+					# Update repository
+					update_repo();
+					$local_rev = get_repo_rev();
+					if ($hash->{repo_rev} ne $local_rev) {
+						log_i("Git working directory has updated; But both were different: $local_rev <> $hash->{repo_rev}");
+						return;
+					}
+					# Restart myself
+					$tx->finish;
+					wait_sec(5);
+					restart_myself();
+				}
 			} else {
-				warn '[WARN] Received unknown command ... ' . $hash;
+				warn '[WARN] Received unknown command ... ' . Mojo::JSON::encode_json($hash);
 			}
 		});
 		$tx->on(finish => sub { # Closed
@@ -163,6 +184,14 @@ sub exec_signage {
 	}
 	print `$prefix$config{chromium_bin_path} --kiosk "$config{signage_page_url}" &` . "\n";
 	log_i("Signage browser started");
+}
+
+# Get revision of Git repository
+sub get_repo_rev {
+	chdir($config{git_cloned_dir_path});
+	my $rev = `$config{git_bin_path} show -s --format=%H`;
+	chomp($rev);
+	return $rev;
 }
 
 # Update Git repository
