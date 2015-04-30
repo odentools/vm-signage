@@ -46,13 +46,10 @@ any '/github-webhook-receiver' => sub {
 	my $s = shift;
 
 	# Read payload parameter
-	if (!defined($s->param('payload'))) {
-		$s->render(text => 'Invalid parameters', status => 400);
-		return;
-	}
+	my $data = $s->req->body; 
 	my $payload;
 	eval {
-		$payload = Mojo::JSON::decode_json($s->param('payload'));
+		$payload = Mojo::JSON::decode_json($data);
 	}; if ($@) {
 		$s->render(text => 'Invalid payload format', status => 400);
 		return;
@@ -71,6 +68,8 @@ any '/github-webhook-receiver' => sub {
 	foreach my $client_id (keys %clients) {
 		$clients{$client_id}->send_message($message);
 	}
+
+	$s->render(text => 'OK');
 };
 
 app->start;
