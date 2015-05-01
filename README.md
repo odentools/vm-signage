@@ -51,6 +51,8 @@ Firstly, run the following commands on your Raspberry Pi:
     $ cd vm-signage/
     $ carton install
 
+(NOTE: If connected network needed a proxy to access WAN, you should run the command  that like follows before above commands: $ export http_proxy="http://proxy.example.com:8080". Then when the run the sudo command, you might want to add -E option.)
+
 Then, make a script file as follows: *start.sh*
 
 ````bash
