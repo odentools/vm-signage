@@ -54,7 +54,7 @@ any '/github-webhook-receiver' => sub {
 	my $s = shift;
 
 	# Read payload parameter
-	my $data = $s->req->body; 
+	my $data = $s->req->body;
 	my $payload;
 	eval {
 		$payload = Mojo::JSON::decode_json($data);

@@ -1,6 +1,8 @@
 # vm-signage
 A simple digital signage kit for Raspberry Pi (Wheezy).
 
+[![Build Status](https://secure.travis-ci.org/odentools/vm-signage.png?branch=master)](http://travis-ci.org/odentools/vm-signage)
+
 ## Components
 
 This kit is composed with 2 components.
@@ -64,28 +66,28 @@ carton exec -- perl signage-device.pl
 Then, make a configuration file as follows: *config/signage-device.conf*
 
 ````perl
-{	
+{
 	# Startup (Optional)
 	startup_wait_sec => 5, # Or undef
 
 	# Signage browser
 	chromium_bin_path => 'chromium',
 	signage_page_url => 'http://example.com/',
-	
+
 	# Proxy (Optional)
 	http_proxy => 'http://proxy.example.com:8080', # Or undef
 
 	# Control server (Optional; Websocket URL of deployed server)
-	control_server_ws_url => 'ws://example.herokuapp.com/', # Or undef
+	control_server_ws_url => 'wss://example.herokuapp.com/', # Or undef
 
 	# Auto updating with using Git (Optional)
 	git_cloned_dir_path => '/home/pi/vm-signage/', # Or undef
 	git_repo_name => 'origin',
 	git_branch_name => 'master',
 	git_bin_path => '/usr/bin/git',
-	
+
 	# Sleep of display (Optional)
-	sleep_begin_time => '21:59', # Or undef 
+	sleep_begin_time => '21:59', # Or undef
 	sleep_end_time => '07:00', # Or undef
 }
 ````
@@ -104,8 +106,8 @@ Finally, please reboot the Raspberry Pi. Let's enjoy :)
 
 ### Add the webhook on GitHub
 
-To auto updating signage when any your any repository was pushed, 
-please register the following settings on the "Webhook" section of 
+To auto updating signage when any your any repository was pushed,
+please register the following settings on the "Webhook" section of
 "Settings - Webhooks & Services" page of the repository on GitHub.
 
 * Payload URL: https://example.heroku.com/github-webhook-receiver
@@ -116,7 +118,7 @@ please register the following settings on the "Webhook" section of
 
 ## Hints
 
-### How to disable sleeping of the HDMI display 
+### How to disable sleeping of the HDMI display
 
 Please edit following files.
 
@@ -139,4 +141,3 @@ And add some @xset line.
 Copyright (C) 2015 OdenTools Project (https://sites.google.com/site/odentools/), Masanori Ohgita (http://ohgita.info/).
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License version 3 (GPL v3).
-
