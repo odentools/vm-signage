@@ -50,7 +50,7 @@ if (defined $ws_url) {
 		# Set event handler
 		$tx->on(json => sub { # Incomming message
 			my ($tx, $hash) = @_;
-			if ($hash->{cmd} eq 'repository-updated') { # On repository updated
+			if ($hash->{cmd} eq 'repository-updated' && $hash->{branch} eq $config{git_branch_name}) { # On repository updated
 				log_i("Repository updated");
 				# Update repository
 				update_repo();
@@ -59,7 +59,7 @@ if (defined $ws_url) {
 				wait_sec(5);
 				restart_myself();
 				exit;
-			} elsif ($hash->{cmd} eq 'get-latest-repo-rev' && exists $hash->{repo_rev}) { # On revision received
+			} elsif ($hash->{cmd} eq 'get-latest-repo-rev' && exists $hash->{repo_revs}) { # On revision received
 				my $local_rev = get_repo_rev();
 				log_i("local = $local_rev, remote = $hash->{repo_rev}");
 				if (defined $hash->{repo_rev} && $hash->{repo_rev} ne $local_rev) {
@@ -255,7 +255,7 @@ sub restart_myself {
 
 # Read content from specified file
 sub slurp {
-	my $path = shift; 
+	my $path = shift;
 	open my $file, '<', $path;
 	my $content = '';
 	while ($file->sysread(my $buffer, 131072, 0)) { $content .= $buffer }

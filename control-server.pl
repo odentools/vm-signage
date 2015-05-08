@@ -3,9 +3,6 @@
 use Mojolicious::Lite;
 use Mojo::JSON;
 
-# Target branch for GitHub Webhook receiver
-our $TARGET_BRANCH = 'master';
-
 # ----
 
 # Set configuration for hypnotoad daemon
@@ -18,7 +15,7 @@ app->config(
 # Initialize clients hash
 our %clients = ();
 # Initialize repository revision
-our %stats = ();
+our %repo_revs = ();
 
 # WebSocket endpoint for push notification to signage device
 websocket '/notif' => sub {
@@ -37,7 +34,8 @@ websocket '/notif' => sub {
 		if (defined $hash->{cmd} && $hash->{cmd} eq 'get-latest-repo-rev') {
 			$tx->send({ json => {
 				cmd => $hash->{cmd},
-				repo_rev => $stats{repo_rev} || undef,
+				repo_rev => $repo_revs{master} || undef, # for old version
+				repo_revs => \%repo_revs, # for compatibility with old version
 			}});
 		}
 	});
@@ -63,23 +61,24 @@ any '/github-webhook-receiver' => sub {
 		return;
 	}
 
-	# Check for branch name
-	if ($TARGET_BRANCH ne "" && $payload->{ref} ne 'refs/heads/'.$TARGET_BRANCH){
-		$s->render(text => 'Not target refs');
+	# Save revision
+	if (!defined $payload->{ref} || $payload->{ref} !~ /^refs\/heads\/(.+)/) {
+		$s->render(text => 'Invalid target refs', status => 400);
 		return;
 	}
-
-	# Save revision
-	$stats{repo_rev} = $payload->{after};
+	my $branch = $1;
+	my $rev = $payload->{after};
+	$repo_revs{$branch} = $rev;
 
 	# Notify to clients
 	foreach my $client_id (keys %clients) {
 		$clients{$client_id}->send({ json => {
 			cmd => 'repository-updated',
+			branch => $branch,
 		}});
 	}
 
-	$s->render(text => 'OK');
+	$s->render(text => 'OK:' . $branch);
 };
 
 app->start;

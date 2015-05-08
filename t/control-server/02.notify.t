@@ -10,7 +10,7 @@ my $t = Test::Mojo->new;
 # Correct request - Repository revision is still empty
 $t->websocket_ok('/notif')->send_ok({json => {
     cmd => 'get-latest-repo-rev',
-}})->message_ok->json_is('/repo_rev' => undef);
+}})->message_ok->json_is('/repo_revs' => undef);
 
 # Done
 done_testing();

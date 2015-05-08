@@ -1,9 +1,9 @@
 # vm-signage
 A simple digital signage kit for Raspberry Pi 1 or 2 (with Raspbian).
 
-[![Build Status](https://secure.travis-ci.org/mugifly/vm-signage.png?branch=master)](http://travis-ci.org/mugifly/vm-signage)
+[CI] mugifly's vm-signage/master: [![Build Status](https://secure.travis-ci.org/mugifly/vm-signage.png?branch=master)](http://travis-ci.org/mugifly/vm-signage)
 
-## Components
+## About Components
 
 This kit is composed with 2 components.
 
@@ -22,7 +22,7 @@ The control-server allows auto updating of signage when your any repository has 
 However, whether to use of this function is optional;
 If you won't use it, you don't need to use the control-server.
 
-## Files
+## About Files
 * Procfile - File for control-server (for deploying to Heroku)
 * control-server.pl - Control-server script
 * cpanfile - Definition of dependent modules
@@ -30,31 +30,53 @@ If you won't use it, you don't need to use the control-server.
 
 ## Quick Installation
 
-If you want to make a digital-signage quickly, that's enough only to run the step 3 of Installation steps on your Raspberry Pi.
-In addition, In the configuration file, please set a blank into the *control_server_ws_url* parameter.
+If you want to quickly make a digital-signage,
+that's enough only to run the [Step.4](#installation-rpi) of Installation steps on your Raspberry Pi.
 
-Let turn on your Rasppberry Pi!
+In addition, please attention to followings:
+* About configuration-file (config/signage-device.conf):
+    * *control_server_ws_url* and *git_cloned_dir_path* parameter should be empty (*undef*).
+* About repository URL:
+    * The *YOURNAME* part should be replace to "mugifly"; e.g., https://github.com/mugifly/vm-signage.git
+
+Let turn on your Raspberry Pi!
 
 ## Installation
 
 ### 1. Forking of Repository
 
-If you will customize this kit, You should fork the repository from https://github.com/mugifly/vm-signage.
-Then please make a customizing into your forked repository.
+If you will customize this kit, firstlly, You should fork the repository from upstream (https://github.com/mugifly/vm-signage).
+If you don't have GitHub account, please make the account OR use [Quick Installation](#quick-installation).
 
-### 2. Deployment of Control-server on Heroku
+### 2. Git-clone and Making of Branch <a name="installation-gitclone"></a>
 
-Firstly, signup on the [Heroku](https://www.heroku.com/). And install the [Heroku Toolbelt](https://toolbelt.heroku.com/) on your computer.
+To easier customizing, You should make a new branch.
+It will be also easier merging from upstream repository.
 
-Then, please run the following commands on your computer:
+Please run the following commands on your computer:
 
     $ git clone https://github.com/YOURNAME/vm-signage.git
     $ cd vm-signage/
+    $ git checkout -b my-signage
+    $ git push origin my-signage
+
+When you customize this kit, you should make a customizing into this *my-signage* branch.
+
+(TIPS: You can customize multiple signage devices by making branches for each. Please see [Hints](#hints) section for details.)
+
+### 3. Deployment of Control-server on Heroku
+
+Firstly, signup on the [Heroku](https://www.heroku.com/).
+And install the [Heroku Toolbelt](https://toolbelt.heroku.com/) on your computer.
+
+Then please run the following commands on the cloned directory by Step.2:
+
     $ heroku create --buildpack https://github.com/kazeburo/heroku-buildpack-perl-procfile.git
     $ git push heroku master
     $ heroku open
 
-### 3. Installation of Signage-device on Raspberry Pi
+
+### 4. Installation of Signage-device on Raspberry Pi <a name="installation-rpi"></a>
 
 Firstly, run the following commands on your Raspberry Pi:
 
@@ -75,7 +97,7 @@ cd ~/vm-signage
 carton exec -- perl signage-device.pl
 ````
 
-Then, make a configuration file as follows: *config/signage-device.conf*
+Then, make a configuration-file as follows: *config/signage-device.conf*
 
 ````perl
 {
@@ -95,7 +117,7 @@ Then, make a configuration file as follows: *config/signage-device.conf*
 	# Auto updating with using Git (Optional)
 	git_cloned_dir_path => '/home/pi/vm-signage/', # Or undef
 	git_repo_name => 'origin',
-	git_branch_name => 'master',
+	git_branch_name => 'my-signage',
 	git_bin_path => '/usr/bin/git',
 
 	# Sleep of display (Optional)
@@ -112,17 +134,16 @@ After that, add the following line into the LXDE autostart file: *~/.config/lxse
 @/bin/bash ~/vm-signage/start.sh
 ````
 
-Finally, please reboot the Raspberry Pi. Let's enjoy :)
+Finally, You must reboot the Raspberry Pi.
 
     $ sudo shutdown -r now
 
-### 4. Add Webhook on GitHub
+### 5. Add Webhook on GitHub
 
 To auto updating signage when any your any repository was pushed,
-please register the following settings on the "Webhook" section of
-"Settings - Webhooks & Services" page of the forked repository on GitHub.
+please register the following settings on the "Webhook" section of "Settings - Webhooks & Services" page of the forked repository on GitHub.
 
-* Payload URL: https://example.heroku.com/github-webhook-receiver
+* Payload URL: https://example.herokuapp.com/github-webhook-receiver
 * Content type: application/json
 * Secret: (empty)
 * Which events would you like to trigger this webhook?: Just the push event
@@ -135,7 +156,7 @@ please register the following settings on the "Webhook" section of
 Please edit following files.
 
 In the line that begin from @xscreensaver should be commented out.
-And add some @xset line.
+And add some @xset lines.
 
 */etc/xdg/lxsession/LXDE/autostart*
 
@@ -147,6 +168,10 @@ And add some @xset line.
     @xset s off
     @xset -dpms
     @xset s noblank
+
+### How to customize multiple signage devices
+
+Under construction...
 
 ## License
 
