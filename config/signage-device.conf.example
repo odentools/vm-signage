@@ -5,19 +5,19 @@
 	# Signage browser
 	chromium_bin_path => 'chromium',
 	signage_page_url => 'http://example.com/',
-	
+
 	# Proxy (Optional)
 	http_proxy => undef,
-	
+
 	# Control server (Optional; Websocket URL of deployed server)
-	control_server_ws_url => 'ws://example.herokuapp.com/',
+	control_server_ws_url => 'wss://example.herokuapp.com/',
 	
 	# Auto updating with using Git (Optional)
 	git_cloned_dir_path => '/home/pi/vm-signage/',
 	git_repo_name => 'origin',
 	git_branch_name => 'master',
 	git_bin_path => 'git',
-	
+
 	# Sleep of display (Optional)
 	sleep_begin_time => '21:59',
 	sleep_end_time => '07:00',

@@ -1,7 +1,7 @@
 # vm-signage
-A simple digital signage kit for Raspberry Pi (Wheezy).
+A simple digital signage kit for Raspberry Pi 1 or 2 (with Raspbian).
 
-[![Build Status](https://secure.travis-ci.org/odentools/vm-signage.png?branch=master)](http://travis-ci.org/odentools/vm-signage)
+[![Build Status](https://secure.travis-ci.org/mugifly/vm-signage.png?branch=master)](http://travis-ci.org/mugifly/vm-signage)
 
 ## Components
 
@@ -28,28 +28,40 @@ If you won't use it, you don't need to use the control-server.
 * cpanfile - Definition of dependent modules
 * signage-device.pl - Signage-device script (for Raspberry Pi)
 
+## Quick Installation
+
+If you want to make a digital-signage quickly, that's enough only to run the step 3 of Installation steps on your Raspberry Pi.
+In addition, In the configuration file, please set a blank into the *control_server_ws_url* parameter.
+
+Let turn on your Rasppberry Pi!
+
 ## Installation
 
-### Control-server on Heroku
+### 1. Forking of Repository
+
+If you will customize this kit, You should fork the repository from https://github.com/mugifly/vm-signage.
+Then please make a customizing into your forked repository.
+
+### 2. Deployment of Control-server on Heroku
 
 Firstly, signup on the [Heroku](https://www.heroku.com/). And install the [Heroku Toolbelt](https://toolbelt.heroku.com/) on your computer.
 
 Then, please run the following commands on your computer:
 
-    $ git clone https://github.com/odentools/vm-signage.git
+    $ git clone https://github.com/YOURNAME/vm-signage.git
     $ cd vm-signage/
     $ heroku create --buildpack https://github.com/kazeburo/heroku-buildpack-perl-procfile.git
     $ git push heroku master
     $ heroku open
 
-### Signage-device on Raspberry Pi
+### 3. Installation of Signage-device on Raspberry Pi
 
 Firstly, run the following commands on your Raspberry Pi:
 
     $ sudo apt-get install perl git chromium x11-xserver-utils
     $ sudo cpan install Carton
     $ cd ~
-    $ git clone https://github.com/odentools/vm-signage.git
+    $ git clone https://github.com/YOURNAME/vm-signage.git
     $ cd vm-signage/
     $ carton install
 
@@ -104,11 +116,11 @@ Finally, please reboot the Raspberry Pi. Let's enjoy :)
 
     $ sudo shutdown -r now
 
-### Add the webhook on GitHub
+### 4. Add Webhook on GitHub
 
 To auto updating signage when any your any repository was pushed,
 please register the following settings on the "Webhook" section of
-"Settings - Webhooks & Services" page of the repository on GitHub.
+"Settings - Webhooks & Services" page of the forked repository on GitHub.
 
 * Payload URL: https://example.heroku.com/github-webhook-receiver
 * Content type: application/json
@@ -138,6 +150,6 @@ And add some @xset line.
 
 ## License
 
-Copyright (C) 2015 OdenTools Project (https://sites.google.com/site/odentools/), Masanori Ohgita (http://ohgita.info/).
+Copyright (C) 2015 Masanori Ohgita (http://ohgita.info/).
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License version 3 (GPL v3).

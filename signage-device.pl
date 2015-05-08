@@ -27,6 +27,9 @@ my $ua;
 my $ws_url = $config{control_server_ws_url} || undef;
 if (defined $ws_url) {
 	$ua = Mojo::UserAgent->new();
+	if (defined $config{http_proxy}) {
+		$ua->proxy->http($config{http_proxy})->https($config{http_proxy});
+	}
 	$ua->inactivity_timeout(3600); # 60min
 	$ua->websocket($ws_url.'notif' => sub {
 		my ($ua, $tx) = @_;
