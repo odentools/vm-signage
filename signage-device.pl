@@ -6,6 +6,14 @@ use FindBin;
 use Mojo::UserAgent;
 use Time::Piece;
 
+our @CHROMIUM_OPTIONS = qw/
+--kiosk
+--disable-session-crashed-bubble
+--disable-restore-background-contents
+--disable-new-tab-first-run
+--disable-restore-session-stat
+/;
+
 # Disable buffering
 $| = 1;
 
@@ -60,21 +68,25 @@ if (defined $ws_url) {
 				restart_myself();
 				exit;
 			} elsif ($hash->{cmd} eq 'get-latest-repo-rev' && exists $hash->{repo_revs}) { # On revision received
+				my $repo_name = $config{git_branch_name};
 				my $local_rev = get_repo_rev();
-				log_i("local = $local_rev, remote = $hash->{repo_rev}");
-				if (defined $hash->{repo_rev} && $hash->{repo_rev} ne $local_rev) {
-					log_i("Repository was old: $local_rev");
-					# Update repository
-					update_repo();
-					$local_rev = get_repo_rev();
-					if ($hash->{repo_rev} ne $local_rev) {
-						log_i("Git working directory has updated; But both were different: $local_rev <> $hash->{repo_rev}");
-						return;
+				if (defined $hash->{repo_revs}->{$repo_name}) {
+					my $remote_rev = $hash->{repo_revs}->{$repo_name};
+					log_i("local = $local_rev, remote = $hash->{repo_rev}");
+					if ($remote_rev ne $local_rev) {
+						log_i("Repository was old: $local_rev");
+						# Update repository
+						update_repo();
+						$local_rev = get_repo_rev();
+						if ($hash->{repo_rev} ne $local_rev) {
+							log_i("Git working directory has updated; But both were different: $local_rev <> $hash->{repo_rev}");
+							return;
+						}
+						# Restart myself
+						$tx->finish;
+						wait_sec(5);
+						restart_myself();
 					}
-					# Restart myself
-					$tx->finish;
-					wait_sec(5);
-					restart_myself();
 				}
 			} else {
 				warn '[WARN] Received unknown command ... ' . Mojo::JSON::encode_json($hash);
@@ -178,14 +190,25 @@ sub print_help {
 
 # Execute signage
 sub exec_signage {
-	return if (defined $config{is_debug});
 
 	log_i("Signage browser starting...");
-	my $prefix = '';
-	if (defined $config{http_proxy} && $config{http_proxy} ne '') {
-		$prefix = 'http_proxy="' . $config{http_proxy} . '" ';
+	# Make command
+	my $cmd;
+	{
+		my $prefix = '';
+		if (defined $config{http_proxy} && $config{http_proxy} ne '') {
+			$prefix = 'http_proxy="' . $config{http_proxy} . '" ';
+		}
+		$" = " ";
+		$cmd = "$prefix$config{chromium_bin_path} @CHROMIUM_OPTIONS $config{signage_page_url} &";
 	}
-	print `$prefix$config{chromium_bin_path} --kiosk "$config{signage_page_url}" &` . "\n";
+	# Run command and print results
+	if (defined $config{is_debug}) {
+		log_i("DEBUG - $cmd");
+	} else {
+		my $result = `$cmd`;
+		log_i($result);
+	}
 	log_i("Signage browser started");
 }
 
@@ -214,14 +237,15 @@ sub update_repo {
 
 # Set sleeping state of display
 sub set_display_power {
-	return if (defined $config{is_debug});
 
 	my $is_power = shift;
 	if (!$is_power) {
 		log_i("Display sleeping start");
+		return if (defined $config{is_debug});
 		print `vcgencmd display_power 0`;
 	} else {
 		log_i("Display sleeping end");
+		return if (defined $config{is_debug});
 		print `vcgencmd display_power 1`;
 	}
 }
