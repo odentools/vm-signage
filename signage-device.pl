@@ -28,7 +28,8 @@ check_params();
 if (defined $config{startup_wait_sec}) {
 	wait_sec($config{startup_wait_sec});
 }
-exec_signage();
+kill_signage_browser();
+start_signage_browser();
 
 # Connect to control server with using WebSocket
 my $ua;
@@ -116,16 +117,19 @@ my $is_sleeping = -1; # This flag may be reset by restarting of script
 my $id = Mojo::IOLoop->recurring(2 => sub {
 	my $now_s = int(Time::Piece::localtime->strftime('%H%M'));
 	if ($sleep_begin_time != 0 && ($sleep_begin_time <= $now_s || $now_s < $sleep_end_time)) {
-		# Start display sleeping
 		if ($is_sleeping != 1) {
+			# Start display sleeping
 			$is_sleeping = 1;
 			set_display_power(0);
 		}
 	} elsif ($sleep_end_time != 0 && $sleep_end_time <= $now_s) {
-		# Reboot for to end display sleeping
 		if ($is_sleeping != 0) {
+			# End display sleeping
 			$is_sleeping = 0;
 			set_display_power(1);
+			# Restart browser
+			kill_signage_browser();
+			start_signage_browser();
 		}
 	}
 });
@@ -188,9 +192,8 @@ sub print_help {
 	print "$0 [--help|-h] [--no-update]\n";
 }
 
-# Execute signage
-sub exec_signage {
-
+# Start signage browser
+sub start_signage_browser {
 	log_i("Signage browser starting...");
 	# Make command
 	my $cmd;
@@ -210,6 +213,27 @@ sub exec_signage {
 		log_i($result);
 	}
 	log_i("Signage browser started");
+}
+
+# Kill existed signage browser {
+sub kill_signage_browser {
+	# Get number of existed browser process
+	my $num = `ps aux | grep -E "(chrome|chromium)" | wc -l`;
+	chomp($num);
+	$num -= 1; # Deduct grep process
+	if ($num <= 0) {
+		return;
+	}
+
+	# Kill existed browser process
+	log_i("Killing browser process(${num})...");
+	my $cmd = "pkill chrome && pkill chromium";
+	if (defined $config{is_debug}) {
+		log_i("DEBUG - $cmd");
+	} else {
+		my $res = `$cmd`;
+		log_i($res);
+	}
 }
 
 # Get revision of Git repository
