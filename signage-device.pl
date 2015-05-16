@@ -244,19 +244,34 @@ sub get_repo_rev {
 	return $rev;
 }
 
-# Update Git repository
+# Update of Git repository; After of calling this, It should be restarted script
 sub update_repo {
-	return if (defined $config{is_debug});
+	log_i("Updating repository...");
+	if (defined $config{is_debug}) {
+		log_i("DEBUG - Change directory: $config{git_cloned_dir_path}");
+		log_i("DEBUG - $config{git_bin_path} fetch $config{git_repo_name} $config{git_branch_name}");
+		log_i("DEBUG - $config{git_bin_path} reset --hard FETCH_HEAD");
+		log_i("DEBUG - Change directory: $FindBin::Bin");
 
-	log_i("Updating repository...", 1);
-	chdir($config{git_cloned_dir_path});
-	`$config{git_bin_path} fetch $config{git_repo_name} $config{git_branch_name}`;
-	`$config{git_bin_path} reset --hard FETCH_HEAD`;
-	chdir($FindBin::Bin);
-	my $path_bin_carton = `which carton`;
-	chomp($path_bin_carton);
-	#`$path_bin_carton install`; # TODO
-	print "Done\n";
+	} else {
+		# Update of Git work-directory
+		chdir($config{git_cloned_dir_path});
+		`$config{git_bin_path} fetch $config{git_repo_name} $config{git_branch_name}`;
+		`$config{git_bin_path} reset --hard FETCH_HEAD`;
+	}
+
+	# Update of dependent libraries
+	log_i("Updating dependent libraries...");
+	load_carton_libs();
+	eval {
+		require Carton::CLI;
+		my $carton = Carton::CLI->new();
+		$carton->cmd_install();
+	}; if ($@) {
+		log_e("Could not update libraries with Carton: $@");
+	}
+
+	log_i("Done\n");
 }
 
 # Set sleeping state of display
@@ -293,6 +308,28 @@ sub wait_sec {
 		sleep(1);
 	}
 	print "\n";
+}
+
+# Load libraries for carton
+sub load_carton_libs {
+	my @SEARCH_ENVS = ('PERL_LOCAL_LIB_ROOT', 'PERL5LIB');
+	foreach my $env_key (@SEARCH_ENVS) {
+		my $env = $ENV{$env_key};
+		my @paths = split(/:/, $env);
+		foreach my $path (@paths) {
+			add_inc_lib($path);
+			add_inc_lib($path . '/lib/perl5');
+		}
+	}
+}
+
+# Add library include path
+sub add_inc_lib {
+	my ($path) = @_;
+	push(@INC, $path);
+	if (defined $config{is_debug}) {
+		log_i("DEBUG - Add to INC: $path");
+	}
 }
 
 # Restart script
