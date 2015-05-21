@@ -6,13 +6,14 @@ use FindBin;
 use Mojo::UserAgent;
 use Time::Piece;
 
-our @CHROMIUM_OPTIONS = qw/
+our @CHROMIUM_OPTIONS = qw|
 --kiosk
 --disable-session-crashed-bubble
 --disable-restore-background-contents
 --disable-new-tab-first-run
 --disable-restore-session-stat
-/;
+--disk-cache-dir=/dev/null
+|;
 
 # Disable buffering
 $| = 1;
