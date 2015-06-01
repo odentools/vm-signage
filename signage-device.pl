@@ -49,7 +49,8 @@ if ($childProcessId == 0) { # Child process
 }
 
 # Connect to control server with using WebSocket
-my $ua = connect_server();
+my $ua = undef;
+connect_server();
 
 # Prepare for display sleeping
 my ($sleep_begin_time, $sleep_end_time) = (0, 0);
@@ -57,7 +58,15 @@ if (defined $config{sleep_begin_time} && defined $config{sleep_end_time}) {
 	$sleep_begin_time =  time_str_to_num($config{sleep_begin_time});
 	$sleep_end_time = time_str_to_num($config{sleep_end_time});
 }
+
+# Initialize complete
 log_i("Initialize completed");
+if (defined $config{is_test}) { # Test mode
+	log_i("Test done");
+	# Quit
+	quit_myself();
+	exit;
+}
 
 # Define main loop
 my $is_sleeping = -1; # This flag may be reset by restarting of script
@@ -84,6 +93,8 @@ my $id = Mojo::IOLoop->recurring(2 => sub {
 # Start loops
 Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 
+# Quit
+quit_myself();
 exit;
 
 # ----
@@ -124,6 +135,8 @@ sub check_params {
 			exit;
 		} elsif ($_ eq '--debug') {
 			$config{is_debug} = 1;
+		} elsif ($_ eq '--test') {
+			$config{is_test} = 1;
 		}
 	}
 	if (!$is_no_update) {
@@ -146,7 +159,7 @@ sub connect_server {
 	if (!defined $ws_url) {
 		return undef;
 	}
-	my $ua = Mojo::UserAgent->new();
+	$ua = Mojo::UserAgent->new();
 	if (defined $config{http_proxy}) {
 		$ua->proxy->http($config{http_proxy})->https($config{http_proxy});
 	}
@@ -154,7 +167,7 @@ sub connect_server {
 	$ua->websocket($ws_url.'notif' => sub {
 		my ($ua, $tx) = @_;
 		if (!$tx->is_websocket) {
-			log_e("WebSocket handshake failed: ${ws_url}notif");
+			log_e("WebSocket handshake FAILED: ${ws_url}notif");
 			# Restart myself
 			wait_sec(5);
 			restart_myself();
@@ -214,7 +227,6 @@ sub connect_server {
 			exit;
 		});
 	});
-	return $ua;
 }
 
 # Start signage browser
@@ -230,7 +242,6 @@ sub start_signage_browser {
 		$" = " ";
 		$cmd = "$prefix$config{chromium_bin_path} @CHROMIUM_OPTIONS $config{signage_page_url} &";
 	}
-	`top`; # TODO
 	# Run command and print results
 	if (defined $config{is_debug}) {
 		log_i("DEBUG - $cmd");
@@ -272,13 +283,14 @@ sub get_repo_rev {
 
 # Update of Git repository; After of calling this, It should be restarted script
 sub update_repo {
+	return if (defined $config{is_test});
+
 	log_i("Updating repository...");
 	if (defined $config{is_debug}) {
 		log_i("DEBUG - Change directory: $config{git_cloned_dir_path}");
 		log_i("DEBUG - $config{git_bin_path} fetch $config{git_repo_name} $config{git_branch_name}");
 		log_i("DEBUG - $config{git_bin_path} reset --hard FETCH_HEAD");
 		log_i("DEBUG - Change directory: $FindBin::Bin");
-
 	} else {
 		# Update of Git work-directory
 		chdir($config{git_cloned_dir_path});
@@ -288,6 +300,10 @@ sub update_repo {
 
 	# Update of dependent libraries
 	log_i("Updating dependent libraries...");
+	if (defined $config{http_proxy} && $config{http_proxy} ne '') {
+		$ENV{HTTP_PROXY} = $config{http_proxy};
+		$ENV{http_proxy} = $config{http_proxy};
+	}
 	load_carton_libs();
 	eval {
 		require Carton::CLI;
@@ -295,9 +311,35 @@ sub update_repo {
 		$carton->cmd_install();
 	}; if ($@) {
 		log_e("Could not update libraries with Carton: $@");
+		# Revert
+		if (!defined $config{is_debug}) {
+			log_i("[Failsafe] Reverting revision...");
+			`$config{git_bin_path} fetch $config{git_repo_name} $config{git_branch_name}`;
+			`$config{git_bin_path} reset --hard FETCH_HEAD~1`;
+			log_i("[Failsafe] Reverted to " . get_repo_rev());
+		}
+		return;
 	}
 
-	log_i("Done\n");
+	# Test run
+	my @a = @ARGV;
+	push(@a, '--no-update');
+	push(@a, '--test');
+	my $res = `$^X $0 @a`;
+	if ($res !~ /Test done/) {
+		log_e("Test run was FAILED");
+		# Revert
+		if (!defined $config{is_debug}) {
+			log_i("[Failsafe] Reverting revision...");
+			`$config{git_bin_path} fetch $config{git_repo_name} $config{git_branch_name}`;
+			`$config{git_bin_path} reset --hard FETCH_HEAD~1`;
+			log_i("[Failsafe] Reverted to " . get_repo_rev());
+		}
+		return;
+	}
+
+	log_i("Test run was successful");
+	log_i("Updating completed\n");
 }
 
 # Set sleeping state of display
@@ -357,6 +399,17 @@ sub add_inc_lib {
 	push(@INC, $path);
 	if (defined $config{is_debug}) {
 		log_i("DEBUG - Add to INC: $path");
+	}
+}
+
+# Pretreatment for quit myself
+sub quit_myself {
+	# Cleanup of child process and manager
+	if (defined $childProcessId) {
+		kill("KILL", $childProcessId);
+	}
+	if (defined $pm) {
+		$pm->wait_all_children; # No more zombies...
 	}
 }
 
