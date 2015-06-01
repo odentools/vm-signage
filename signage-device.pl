@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use FindBin;
 use Mojo::UserAgent;
+use Parallel::ForkManager;
 use Time::Piece;
 
 our @CHROMIUM_OPTIONS = qw|
@@ -25,17 +26,139 @@ check_configs();
 # Read parameters
 check_params();
 
-# Start browser for signage
-if (defined $config{startup_wait_sec}) {
-	wait_sec($config{startup_wait_sec});
+# Fork of process for browser startup
+my $pm = Parallel::ForkManager->new(1);
+my $childProcessId;
+$pm->run_on_finish( sub { # Callback when child process exit or die
+	my ($pid, $exit_code, $ident, $exit_signal, $core_dump, $data_structure_reference) = @_;
+	$childProcessId = undef;
+});
+$childProcessId = $pm->start;
+if ($childProcessId == 0) { # Child process
+	$SIG{__DIE__} = sub { $pm->finish(-1); };
+	# Wait
+	if (defined $config{startup_wait_sec}) {
+		wait_sec($config{startup_wait_sec});
+	}
+	# Start browser for signage by child process
+	kill_signage_browser();
+	start_signage_browser();
+	# End of child process
+	$pm->finish(0);
+	exit;
 }
-kill_signage_browser();
-start_signage_browser();
 
 # Connect to control server with using WebSocket
-my $ua;
-my $ws_url = $config{control_server_ws_url} || undef;
-if (defined $ws_url) {
+my $ua = undef;
+connect_server();
+
+# Prepare for display sleeping
+my ($sleep_begin_time, $sleep_end_time) = (0, 0);
+if (defined $config{sleep_begin_time} && defined $config{sleep_end_time}) {
+	$sleep_begin_time =  time_str_to_num($config{sleep_begin_time});
+	$sleep_end_time = time_str_to_num($config{sleep_end_time});
+}
+
+# Initialize complete
+log_i("Initialize completed");
+if (defined $config{is_test}) { # Test mode
+	log_i("Test done");
+	# Quit
+	quit_myself();
+	exit;
+}
+
+# Define main loop
+my $is_sleeping = -1; # This flag may be reset by restarting of script
+my $id = Mojo::IOLoop->recurring(2 => sub {
+	my $now_s = int(Time::Piece::localtime->strftime('%H%M'));
+	if ($sleep_begin_time != 0 && ($sleep_begin_time <= $now_s || $now_s < $sleep_end_time)) {
+		if ($is_sleeping != 1) {
+			# Start display sleeping
+			$is_sleeping = 1;
+			set_display_power(0);
+		}
+	} elsif ($sleep_end_time != 0 && $sleep_end_time <= $now_s) {
+		if ($is_sleeping != 0) {
+			# End display sleeping
+			$is_sleeping = 0;
+			set_display_power(1);
+			# Restart browser
+			kill_signage_browser();
+			start_signage_browser();
+		}
+	}
+});
+
+# Start loops
+Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
+
+# Quit
+quit_myself();
+exit;
+
+# ----
+
+# Read an configuration
+sub read_configs {
+	my $conf_path = "${FindBin::Bin}/config/signage-device.conf";
+	if (!-f $conf_path) {
+		log_e("Config file is not found: $conf_path", 1);
+	}
+	my %conf = %{eval slurp("${FindBin::Bin}/config/signage-device.conf")};
+	if ($@) {
+		log_e("Config file could not read: $conf_path", 1);
+	}
+	return %conf;
+}
+
+# Check an configuration
+sub check_configs {
+	if (defined $config{control_server_ws_url} || defined $config{git_cloned_dir_path}) {
+		my @param_names = qw/ control_server_ws_url git_cloned_dir_path git_repo_name git_branch_name git_bin_path /;
+		foreach (@param_names) {
+			if (!defined $config{$_}) {
+				log_e("Config - $_ undefined", 1);
+			}
+		}
+	}
+}
+
+# Check a parameter
+sub check_params {
+	my $is_no_update = 0;
+	foreach (@ARGV) {
+		if ($_ eq '--no-update') {
+			$is_no_update = 1;
+		} elsif ($_ eq '--help' || $_ eq '-h') {
+			print_help();
+			exit;
+		} elsif ($_ eq '--debug') {
+			$config{is_debug} = 1;
+		} elsif ($_ eq '--test') {
+			$config{is_test} = 1;
+		}
+	}
+	if (!$is_no_update) {
+		# Update and restart
+		update_repo();
+		push(@ARGV, '--no-update');
+		restart_myself();
+		exit;
+	}
+}
+
+# Print help
+sub print_help {
+	print "$0 [--help|-h] [--no-update]\n";
+}
+
+# Connect to server
+sub connect_server {
+	my $ws_url = $config{control_server_ws_url} || undef;
+	if (!defined $ws_url) {
+		return undef;
+	}
 	$ua = Mojo::UserAgent->new();
 	if (defined $config{http_proxy}) {
 		$ua->proxy->http($config{http_proxy})->https($config{http_proxy});
@@ -44,7 +167,7 @@ if (defined $ws_url) {
 	$ua->websocket($ws_url.'notif' => sub {
 		my ($ua, $tx) = @_;
 		if (!$tx->is_websocket) {
-			log_e("WebSocket handshake failed: ${ws_url}notif");
+			log_e("WebSocket handshake FAILED: ${ws_url}notif");
 			# Restart myself
 			wait_sec(5);
 			restart_myself();
@@ -88,6 +211,7 @@ if (defined $ws_url) {
 						$tx->finish;
 						wait_sec(5);
 						restart_myself();
+						exit;
 					}
 				}
 			} else {
@@ -103,94 +227,6 @@ if (defined $ws_url) {
 			exit;
 		});
 	});
-}
-
-# Prepare for display sleeping
-my ($sleep_begin_time, $sleep_end_time) = (0, 0);
-if (defined $config{sleep_begin_time} && defined $config{sleep_end_time}) {
-	$sleep_begin_time =  time_str_to_num($config{sleep_begin_time});
-	$sleep_end_time = time_str_to_num($config{sleep_end_time});
-}
-log_i("Initialize completed");
-
-# Define main loop
-my $is_sleeping = -1; # This flag may be reset by restarting of script
-my $id = Mojo::IOLoop->recurring(2 => sub {
-	my $now_s = int(Time::Piece::localtime->strftime('%H%M'));
-	if ($sleep_begin_time != 0 && ($sleep_begin_time <= $now_s || $now_s < $sleep_end_time)) {
-		if ($is_sleeping != 1) {
-			# Start display sleeping
-			$is_sleeping = 1;
-			set_display_power(0);
-		}
-	} elsif ($sleep_end_time != 0 && $sleep_end_time <= $now_s) {
-		if ($is_sleeping != 0) {
-			# End display sleeping
-			$is_sleeping = 0;
-			set_display_power(1);
-			# Restart browser
-			kill_signage_browser();
-			start_signage_browser();
-		}
-	}
-});
-
-# Start loops
-Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
-
-exit;
-
-# ----
-
-# Read an configuration
-sub read_configs {
-	my $conf_path = "${FindBin::Bin}/config/signage-device.conf";
-	if (!-f $conf_path) {
-		log_e("Config file is not found: $conf_path", 1);
-	}
-	my %conf = %{eval slurp("${FindBin::Bin}/config/signage-device.conf")};
-	if ($@) {
-		log_e("Config file could not read: $conf_path", 1);
-	}
-	return %conf;
-}
-
-# Check an configuration
-sub check_configs {
-	if (defined $config{control_server_ws_url} || defined $config{git_cloned_dir_path}) {
-		my @param_names = qw/ control_server_ws_url git_cloned_dir_path git_repo_name git_branch_name git_bin_path /;
-		foreach (@param_names) {
-			if (!defined $config{$_}) {
-				log_e("Config - $_ undefined", 1);
-			}
-		}
-	}
-}
-
-# Check a parameter
-sub check_params {
-	my $is_no_update = 0;
-	foreach (@ARGV) {
-		if ($_ eq '--no-update') {
-			$is_no_update = 1;
-		} elsif ($_ eq '--help' || $_ eq '-h') {
-			print_help();
-			exit;
-		} elsif ($_ eq '--debug') {
-			$config{is_debug} = 1;
-		}
-	}
-	if (!$is_no_update) {
-		# Update and restart
-		update_repo();
-		push(@ARGV, '--no-update');
-		restart_myself();
-	}
-}
-
-# Print help
-sub print_help {
-	print "$0 [--help|-h] [--no-update]\n";
 }
 
 # Start signage browser
@@ -247,13 +283,14 @@ sub get_repo_rev {
 
 # Update of Git repository; After of calling this, It should be restarted script
 sub update_repo {
+	return if (defined $config{is_test});
+
 	log_i("Updating repository...");
 	if (defined $config{is_debug}) {
 		log_i("DEBUG - Change directory: $config{git_cloned_dir_path}");
 		log_i("DEBUG - $config{git_bin_path} fetch $config{git_repo_name} $config{git_branch_name}");
 		log_i("DEBUG - $config{git_bin_path} reset --hard FETCH_HEAD");
 		log_i("DEBUG - Change directory: $FindBin::Bin");
-
 	} else {
 		# Update of Git work-directory
 		chdir($config{git_cloned_dir_path});
@@ -263,6 +300,10 @@ sub update_repo {
 
 	# Update of dependent libraries
 	log_i("Updating dependent libraries...");
+	if (defined $config{http_proxy} && $config{http_proxy} ne '') {
+		$ENV{HTTP_PROXY} = $config{http_proxy};
+		$ENV{http_proxy} = $config{http_proxy};
+	}
 	load_carton_libs();
 	eval {
 		require Carton::CLI;
@@ -270,9 +311,35 @@ sub update_repo {
 		$carton->cmd_install();
 	}; if ($@) {
 		log_e("Could not update libraries with Carton: $@");
+		# Revert
+		if (!defined $config{is_debug}) {
+			log_i("[Failsafe] Reverting revision...");
+			`$config{git_bin_path} fetch $config{git_repo_name} $config{git_branch_name}`;
+			`$config{git_bin_path} reset --hard FETCH_HEAD~1`;
+			log_i("[Failsafe] Reverted to " . get_repo_rev());
+		}
+		return;
 	}
 
-	log_i("Done\n");
+	# Test run
+	my @a = @ARGV;
+	push(@a, '--no-update');
+	push(@a, '--test');
+	my $res = `$^X $0 @a`;
+	if ($res !~ /Test done/) {
+		log_e("Test run was FAILED");
+		# Revert
+		if (!defined $config{is_debug}) {
+			log_i("[Failsafe] Reverting revision...");
+			`$config{git_bin_path} fetch $config{git_repo_name} $config{git_branch_name}`;
+			`$config{git_bin_path} reset --hard FETCH_HEAD~1`;
+			log_i("[Failsafe] Reverted to " . get_repo_rev());
+		}
+		return;
+	}
+
+	log_i("Test run was successful");
+	log_i("Updating completed\n");
 }
 
 # Set sleeping state of display
@@ -316,10 +383,12 @@ sub load_carton_libs {
 	my @SEARCH_ENVS = ('PERL_LOCAL_LIB_ROOT', 'PERL5LIB');
 	foreach my $env_key (@SEARCH_ENVS) {
 		my $env = $ENV{$env_key};
-		my @paths = split(/:/, $env);
-		foreach my $path (@paths) {
-			add_inc_lib($path);
-			add_inc_lib($path . '/lib/perl5');
+		if (defined $env) {
+			my @paths = split(/:/, $env);
+			foreach my $path (@paths) {
+				add_inc_lib($path);
+				add_inc_lib($path . '/lib/perl5');
+			}
 		}
 	}
 }
@@ -333,8 +402,27 @@ sub add_inc_lib {
 	}
 }
 
+# Pretreatment for quit myself
+sub quit_myself {
+	# Cleanup of child process and manager
+	if (defined $childProcessId) {
+		kill("KILL", $childProcessId);
+	}
+	if (defined $pm) {
+		$pm->wait_all_children; # No more zombies...
+	}
+}
+
 # Restart script
 sub restart_myself {
+	# Cleanup of child process and manager
+	if (defined $childProcessId) {
+		kill("KILL", $childProcessId);
+	}
+	if (defined $pm) {
+		$pm->wait_all_children; # No more zombies...
+	}
+	# Restart myself
 	log_i("Restarting...");
 	exec($^X, $0, @ARGV);
 }
@@ -352,7 +440,7 @@ sub slurp {
 sub log_i {
 	my ($mes, $opt_no_break_line) = @_;
 	my $now = time();
-	print "[INFO:$now]  $mes";
+	print "[INFO:$now:$$]  $mes";
 	if (!defined $opt_no_break_line || !$opt_no_break_line) {
 		print "\n";
 	}
