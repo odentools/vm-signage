@@ -4,7 +4,6 @@ use strict;
 use warnings;
 use FindBin;
 use Mojo::UserAgent;
-use Parallel::ForkManager;
 use Time::Piece;
 
 our @CHROMIUM_OPTIONS = qw|
@@ -26,30 +25,85 @@ check_configs();
 # Read parameters
 check_params();
 
-# Fork of process for browser startup
-my $pm = Parallel::ForkManager->new(1);
-my $childProcessId;
-$pm->run_on_finish( sub { # Callback when child process exit or die
-	my ($pid, $exit_code, $ident, $exit_signal, $core_dump, $data_structure_reference) = @_;
-	$childProcessId = undef;
-});
-$childProcessId = $pm->start;
-if ($childProcessId == 0) { # Child process
-	$SIG{__DIE__} = sub { $pm->finish(-1); };
-	# Wait
-	if (defined $config{startup_wait_sec}) {
-		wait_sec($config{startup_wait_sec});
-	}
-	# Start browser for signage by child process
-	kill_signage_browser();
-	start_signage_browser();
-	# End of child process
-	$pm->finish(0);
-	exit;
+# Start browser for signage
+if (defined $config{startup_wait_sec}) {
+	wait_sec($config{startup_wait_sec});
 }
+kill_signage_browser();
+start_signage_browser();
 
 # Connect to control server with using WebSocket
-my $ua = connect_server();
+my $ua;
+my $ws_url = $config{control_server_ws_url} || undef;
+if (defined $ws_url) {
+	$ua = Mojo::UserAgent->new();
+	if (defined $config{http_proxy}) {
+		$ua->proxy->http($config{http_proxy})->https($config{http_proxy});
+	}
+	$ua->inactivity_timeout(3600); # 60min
+	$ua->websocket($ws_url.'notif' => sub {
+		my ($ua, $tx) = @_;
+		if (!$tx->is_websocket) {
+			log_e("WebSocket handshake failed: ${ws_url}notif");
+			# Restart myself
+			wait_sec(5);
+			restart_myself();
+			exit;
+		}
+		log_i("WebSocket connected");
+
+		# Check latest revision of repository
+		$tx->send({ json => {
+				cmd => 'get-latest-repo-rev',
+		}});
+
+		# Set event handler
+		$tx->on(json => sub { # Incomming message
+			my ($tx, $hash) = @_;
+			if ($hash->{cmd} eq 'repository-updated' && $hash->{branch} eq $config{git_branch_name}) { # On repository updated
+				log_i("Repository updated");
+				# Update repository
+				update_repo();
+				# Restart myself
+				$tx->finish;
+				wait_sec(5);
+				restart_myself();
+				exit;
+			} elsif ($hash->{cmd} eq 'get-latest-repo-rev' && exists $hash->{repo_revs}) { # On revision received
+				my $repo_name = $config{git_branch_name};
+				my $local_rev = get_repo_rev();
+				if (defined $hash->{repo_revs}->{$repo_name}) {
+					my $remote_rev = $hash->{repo_revs}->{$repo_name};
+					log_i("local = $local_rev, remote = $hash->{repo_rev}");
+					if ($remote_rev ne $local_rev) {
+						log_i("Repository was old: $local_rev");
+						# Update repository
+						update_repo();
+						$local_rev = get_repo_rev();
+						if ($hash->{repo_rev} ne $local_rev) {
+							log_i("Git working directory has updated; But both were different: $local_rev <> $hash->{repo_rev}");
+							return;
+						}
+						# Restart myself
+						$tx->finish;
+						wait_sec(5);
+						restart_myself();
+					}
+				}
+			} else {
+				warn '[WARN] Received unknown command ... ' . Mojo::JSON::encode_json($hash);
+			}
+		});
+		$tx->on(finish => sub { # Closed
+			my ($s, $code, $reason) = @_;
+			log_i("WebSocket connection closed ... Code=$code");
+			# Restart myself
+			wait_sec(10);
+			restart_myself();
+			exit;
+		});
+	});
+}
 
 # Prepare for display sleeping
 my ($sleep_begin_time, $sleep_end_time) = (0, 0);
@@ -131,90 +185,12 @@ sub check_params {
 		update_repo();
 		push(@ARGV, '--no-update');
 		restart_myself();
-		exit;
 	}
 }
 
 # Print help
 sub print_help {
 	print "$0 [--help|-h] [--no-update]\n";
-}
-
-# Connect to server
-sub connect_server {
-	my $ws_url = $config{control_server_ws_url} || undef;
-	if (!defined $ws_url) {
-		return undef;
-	}
-	my $ua = Mojo::UserAgent->new();
-	if (defined $config{http_proxy}) {
-		$ua->proxy->http($config{http_proxy})->https($config{http_proxy});
-	}
-	$ua->inactivity_timeout(3600); # 60min
-	$ua->websocket($ws_url.'notif' => sub {
-		my ($ua, $tx) = @_;
-		if (!$tx->is_websocket) {
-			log_e("WebSocket handshake failed: ${ws_url}notif");
-			# Restart myself
-			wait_sec(5);
-			restart_myself();
-			exit;
-		}
-		log_i("WebSocket connected");
-
-		# Check latest revision of repository
-		$tx->send({ json => {
-				cmd => 'get-latest-repo-rev',
-		}});
-
-		# Set event handler
-		$tx->on(json => sub { # Incomming message
-			my ($tx, $hash) = @_;
-			if ($hash->{cmd} eq 'repository-updated' && $hash->{branch} eq $config{git_branch_name}) { # On repository updated
-				log_i("Repository updated");
-				# Update repository
-				update_repo();
-				# Restart myself
-				$tx->finish;
-				wait_sec(5);
-				restart_myself();
-				exit;
-			} elsif ($hash->{cmd} eq 'get-latest-repo-rev' && exists $hash->{repo_revs}) { # On revision received
-				my $repo_name = $config{git_branch_name};
-				my $local_rev = get_repo_rev();
-				if (defined $hash->{repo_revs}->{$repo_name}) {
-					my $remote_rev = $hash->{repo_revs}->{$repo_name};
-					log_i("local = $local_rev, remote = $hash->{repo_rev}");
-					if ($remote_rev ne $local_rev) {
-						log_i("Repository was old: $local_rev");
-						# Update repository
-						update_repo();
-						$local_rev = get_repo_rev();
-						if ($hash->{repo_rev} ne $local_rev) {
-							log_i("Git working directory has updated; But both were different: $local_rev <> $hash->{repo_rev}");
-							return;
-						}
-						# Restart myself
-						$tx->finish;
-						wait_sec(5);
-						restart_myself();
-						exit;
-					}
-				}
-			} else {
-				warn '[WARN] Received unknown command ... ' . Mojo::JSON::encode_json($hash);
-			}
-		});
-		$tx->on(finish => sub { # Closed
-			my ($s, $code, $reason) = @_;
-			log_i("WebSocket connection closed ... Code=$code");
-			# Restart myself
-			wait_sec(10);
-			restart_myself();
-			exit;
-		});
-	});
-	return $ua;
 }
 
 # Start signage browser
@@ -230,7 +206,6 @@ sub start_signage_browser {
 		$" = " ";
 		$cmd = "$prefix$config{chromium_bin_path} @CHROMIUM_OPTIONS $config{signage_page_url} &";
 	}
-	`top`; # TODO
 	# Run command and print results
 	if (defined $config{is_debug}) {
 		log_i("DEBUG - $cmd");
@@ -341,12 +316,10 @@ sub load_carton_libs {
 	my @SEARCH_ENVS = ('PERL_LOCAL_LIB_ROOT', 'PERL5LIB');
 	foreach my $env_key (@SEARCH_ENVS) {
 		my $env = $ENV{$env_key};
-		if (defined $env) {
-			my @paths = split(/:/, $env);
-			foreach my $path (@paths) {
-				add_inc_lib($path);
-				add_inc_lib($path . '/lib/perl5');
-			}
+		my @paths = split(/:/, $env);
+		foreach my $path (@paths) {
+			add_inc_lib($path);
+			add_inc_lib($path . '/lib/perl5');
 		}
 	}
 }
@@ -362,14 +335,6 @@ sub add_inc_lib {
 
 # Restart script
 sub restart_myself {
-	# Cleanup of child process and manager
-	if (defined $childProcessId) {
-		kill("KILL", $childProcessId);
-	}
-	if (defined $pm) {
-		$pm->wait_all_children; # No more zombies...
-	}
-	# Restart myself
 	log_i("Restarting...");
 	exec($^X, $0, @ARGV);
 }
@@ -387,7 +352,7 @@ sub slurp {
 sub log_i {
 	my ($mes, $opt_no_break_line) = @_;
 	my $now = time();
-	print "[INFO:$now:$$]  $mes";
+	print "[INFO:$now]  $mes";
 	if (!defined $opt_no_break_line || !$opt_no_break_line) {
 		print "\n";
 	}
