@@ -27,7 +27,7 @@ $(function () {
 	/* ---- */
 
 	// Connect to server
-	var ws = new WebSocket('ws://localhost:3000/admin/ws/' + WS_KEY);
+	var ws = new WebSocket('ws://' + window.location.host + '/admin/ws/' + WS_KEY);
 
 	ws.onopen = function() {
 		writeLog("Connected to server");
