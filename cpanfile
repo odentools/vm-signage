@@ -1,3 +1,4 @@
 requires 'Mojolicious';
-requires 'Parallel::ForkManager';
+requires 'Mojo::IOLoop::ForkCall';
 requires 'Time::Piece';
+

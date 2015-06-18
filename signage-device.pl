@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use FindBin;
 use Mojo::UserAgent;
-use Parallel::ForkManager;
+use Mojo::IOLoop::ForkCall;
 use Time::Piece;
 
 our @CHROMIUM_OPTIONS = qw|
@@ -26,30 +26,39 @@ check_configs();
 # Read parameters
 check_params();
 
-# Fork of process for browser startup
-my $pm = Parallel::ForkManager->new(1);
-my $childProcessId;
-$pm->run_on_finish( sub { # Callback when child process exit or die
-	my ($pid, $exit_code, $ident, $exit_signal, $core_dump, $data_structure_reference) = @_;
-	$childProcessId = undef;
-});
-$childProcessId = $pm->start;
-if ($childProcessId == 0) { # Child process
-	$SIG{__DIE__} = sub { $pm->finish(-1); };
-	# Wait
-	if (defined $config{startup_wait_sec}) {
-		wait_sec($config{startup_wait_sec});
-	}
-	# Start browser for signage by child process
-	kill_signage_browser();
-	start_signage_browser();
-	# End of child process
-	$pm->finish(0);
-	exit;
+# Wait
+if (defined $config{startup_wait_sec}) {
+	wait_sec($config{startup_wait_sec});
 }
 
+# Fork of process for browser startup
+my $fc = Mojo::IOLoop::ForkCall->new();
+$fc->run(
+	# Processing in child process
+	sub {
+		my @args = @_;
+		#$SIG{__DIE__} = sub { $pm->finish(-1); };
+
+		# Start browser for signage by child process
+		kill_signage_browser();
+		start_signage_browser();
+
+		# End of child process
+		return ();
+	},
+	# Arguments
+	[],
+	# Callback
+	sub {
+		my ($fc, $err, @return) = @_;
+		if (defined $err) {
+			log_e($err);
+		}
+	}
+);
+
 # Connect to control server with using WebSocket
-my $ua = undef;
+our $ua = undef;
 connect_server();
 
 # Prepare for display sleeping
@@ -162,14 +171,16 @@ sub connect_server {
 	$ua = Mojo::UserAgent->new();
 	if (defined $config{http_proxy}) {
 		$ua->proxy->http($config{http_proxy})->https($config{http_proxy});
+		log_i("Connecting with Proxy");
 	}
-	$ua->inactivity_timeout(3600); # 60min
+	$ua = $ua->connect_timeout(60);
+	$ua = $ua->inactivity_timeout(3600); # 60min
 	$ua->websocket($ws_url.'notif' => sub {
 		my ($ua, $tx) = @_;
 		if (!$tx->is_websocket) {
 			log_e("WebSocket handshake FAILED: ${ws_url}notif");
 			# Restart myself
-			wait_sec(5);
+			#wait_sec(5);
 			restart_myself();
 			exit;
 		}
@@ -183,8 +194,15 @@ sub connect_server {
 		# Set event handler
 		$tx->on(json => sub { # Incomming message
 			my ($tx, $hash) = @_;
-			if ($hash->{cmd} eq 'repository-updated' && $hash->{branch} eq $config{git_branch_name}) { # On repository updated
-				log_i("Repository updated");
+			if ($hash->{cmd} eq 'restart') { # Restart request
+				log_i("Received: Restart request");
+				# Restart myself
+				$tx->finish;
+				wait_sec(5);
+				restart_myself();
+				exit;
+			} elsif ($hash->{cmd} eq 'repository-updated' && $hash->{branch} eq $config{git_branch_name}) { # On repository updated
+				log_i("Received: Repository updated");
 				# Update repository
 				update_repo();
 				# Restart myself
@@ -215,7 +233,7 @@ sub connect_server {
 					}
 				}
 			} else {
-				warn '[WARN] Received unknown command ... ' . Mojo::JSON::encode_json($hash);
+				log_i('[WARN] Received unknown command ... ' . Mojo::JSON::encode_json($hash));
 			}
 		});
 		$tx->on(finish => sub { # Closed
@@ -227,6 +245,7 @@ sub connect_server {
 			exit;
 		});
 	});
+	log_i("WebSocket connecting...");
 }
 
 # Start signage browser
@@ -405,23 +424,23 @@ sub add_inc_lib {
 # Pretreatment for quit myself
 sub quit_myself {
 	# Cleanup of child process and manager
-	if (defined $childProcessId) {
-		kill("KILL", $childProcessId);
-	}
-	if (defined $pm) {
-		$pm->wait_all_children; # No more zombies...
-	}
+	#if (defined $childProcessId) {
+	#	kill("KILL", $childProcessId);
+	#}
+	#if (defined $pm) {
+	#	$pm->wait_all_children; # No more zombies...
+	#}
 }
 
 # Restart script
 sub restart_myself {
 	# Cleanup of child process and manager
-	if (defined $childProcessId) {
-		kill("KILL", $childProcessId);
-	}
-	if (defined $pm) {
-		$pm->wait_all_children; # No more zombies...
-	}
+	#if (defined $childProcessId) {
+	#	kill("KILL", $childProcessId);
+	#}
+	#if (defined $pm) {
+	#	$pm->wait_all_children; # No more zombies...
+	#}
 	# Restart myself
 	log_i("Restarting...");
 	exec($^X, $0, @ARGV);
