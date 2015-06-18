@@ -37,7 +37,6 @@ $fc->run(
 	# Processing in child process
 	sub {
 		my @args = @_;
-		#$SIG{__DIE__} = sub { $pm->finish(-1); };
 
 		# Start browser for signage by child process
 		kill_signage_browser();
@@ -73,8 +72,6 @@ log_i("Initialize completed");
 if (defined $config{is_test}) { # Test mode
 	log_i("Test done");
 	# Quit
-	quit_myself();
-
 	exit;
 }
 
@@ -111,7 +108,6 @@ my $id = Mojo::IOLoop->recurring(10 => sub {
 Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 
 # Quit
-quit_myself();
 exit;
 
 # ----
@@ -188,7 +184,6 @@ sub connect_server {
 		if (!$tx->is_websocket) {
 			log_e("WebSocket handshake FAILED: ${ws_url}notif");
 			# Restart myself
-			#wait_sec(5);
 			restart_myself();
 			exit;
 		}
@@ -337,6 +332,27 @@ sub update_repo {
 
 	# Update of dependent libraries
 	log_i("Updating dependent libraries...");
+	update_libs();
+
+	# Self-test
+	if (!test_myself()) {
+		log_e("Self-test was FAILED");
+		# Revert
+		if (!defined $config{is_debug}) {
+			log_i("[Failsafe] Reverting revision...");
+			`$config{git_bin_path} fetch $config{git_repo_name} $config{git_branch_name}`;
+			`$config{git_bin_path} reset --hard FETCH_HEAD~1`;
+			log_i("[Failsafe] Reverted to " . get_repo_rev());
+		}
+		return;
+	}
+
+	log_i("Self-test was successful");
+	log_i("Update has been completed\n");
+}
+
+# Update of dependent libraries
+sub update_libs {
 	if (defined $config{http_proxy} && $config{http_proxy} ne '') {
 		$ENV{HTTP_PROXY} = $config{http_proxy};
 		$ENV{http_proxy} = $config{http_proxy};
@@ -355,24 +371,9 @@ sub update_repo {
 			`$config{git_bin_path} reset --hard FETCH_HEAD~1`;
 			log_i("[Failsafe] Reverted to " . get_repo_rev());
 		}
-		return;
+		return undef;
 	}
-
-	# Self-test
-	if (!test_myself()) {
-		log_e("Self-test was FAILED");
-		# Revert
-		if (!defined $config{is_debug}) {
-			log_i("[Failsafe] Reverting revision...");
-			`$config{git_bin_path} fetch $config{git_repo_name} $config{git_branch_name}`;
-			`$config{git_bin_path} reset --hard FETCH_HEAD~1`;
-			log_i("[Failsafe] Reverted to " . get_repo_rev());
-		}
-		return;
-	}
-
-	log_i("Self-test was successful");
-	log_i("Update has been completed\n");
+	return 1;
 }
 
 # Set sleeping state of display
@@ -435,26 +436,8 @@ sub add_inc_lib {
 	}
 }
 
-# Pretreatment for quit myself
-sub quit_myself {
-	# Cleanup of child process and manager
-	#if (defined $childProcessId) {
-	#	kill("KILL", $childProcessId);
-	#}
-	#if (defined $pm) {
-	#	$pm->wait_all_children; # No more zombies...
-	#}
-}
-
 # Restart script
 sub restart_myself {
-	# Cleanup of child process and manager
-	#if (defined $childProcessId) {
-	#	kill("KILL", $childProcessId);
-	#}
-	#if (defined $pm) {
-	#	$pm->wait_all_children; # No more zombies...
-	#}
 	# Restart myself
 	log_i("Restarting...");
 	exec($^X, $0, @ARGV);
