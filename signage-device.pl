@@ -480,12 +480,16 @@ sub log_i {
 
 	# Logging on server
 	if (defined $config{is_control_server_logging} && defined $webSocketTx) {
-		$webSocketTx->send({ json => {
-			cmd => 'post-log',
-			log_text => $line,
-		}});
+		eval {
+			$webSocketTx->send({ json => {
+				cmd => 'post-log',
+				log_text => $line,
+			}});
+		}; if ($@) {
+			print "[ERROR:$now] WebSocket error - $@\n";
+		}
 	}
-
+	
 	# Output message
 	if (!defined $opt_no_break_line || !$opt_no_break_line) {
 		print $line . "\n";
@@ -502,10 +506,14 @@ sub log_e {
 
 	# Logging on server
 	if (defined $config{is_control_server_logging} && defined $webSocketTx) {
-		$webSocketTx->send({ json => {
-			cmd => 'post-log',
-			log_text => $line,
-		}});
+		eval {
+			$webSocketTx->send({ json => {
+				cmd => 'post-log',
+				log_text => $line,
+			}});
+		}; if ($@) {
+			print "[ERROR:$now] WebSocket error - $@\n";
+		}
 	}
 
 	# Output message or die
