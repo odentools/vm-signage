@@ -74,21 +74,29 @@ if (defined $config{is_test}) { # Test mode
 	log_i("Test done");
 	# Quit
 	quit_myself();
+
 	exit;
 }
 
 # Define main loop
 my $is_sleeping = -1; # This flag may be reset by restarting of script
-my $id = Mojo::IOLoop->recurring(2 => sub {
+my $id = Mojo::IOLoop->recurring(10 => sub {
 	my $now_s = int(Time::Piece::localtime->strftime('%H%M'));
-	if ($sleep_begin_time != 0 && ($sleep_begin_time <= $now_s || $now_s < $sleep_end_time)) {
+	if ($sleep_begin_time != 0 && (
+		($sleep_begin_time <= $now_s && $now_s < $sleep_end_time) ||
+		($sleep_end_time <= $sleep_begin_time && $now_s <= $sleep_begin_time && $now_s < $sleep_end_time)
+	)) {
 		if ($is_sleeping != 1) {
 			# Start display sleeping
 			$is_sleeping = 1;
 			set_display_power(0);
 		}
 	} elsif ($sleep_end_time != 0 && $sleep_end_time <= $now_s) {
-		if ($is_sleeping != 0) {
+		if ($is_sleeping == -1) { # On initial
+			# End display sleeping
+			$is_sleeping = 0;
+			set_display_power(1);
+		} elsif ($is_sleeping != 0) {
 			# End display sleeping
 			$is_sleeping = 0;
 			set_display_power(1);
@@ -196,6 +204,13 @@ sub connect_server {
 			my ($tx, $hash) = @_;
 			if ($hash->{cmd} eq 'restart') { # Restart request
 				log_i("Received: Restart request");
+
+				# Self-testing
+				if (!test_myself()) {
+					log_i("[WARN] Self-test was FAILED; So restart does not allowed.");
+					return;
+				}
+
 				# Restart myself
 				$tx->finish;
 				wait_sec(5);
@@ -282,13 +297,16 @@ sub kill_signage_browser {
 	}
 
 	# Kill existed browser process
-	log_i("Killing browser process(${num})...");
-	my $cmd = "pkill chrome && pkill chromium";
-	if (defined $config{is_debug}) {
-		log_i("DEBUG - $cmd");
-	} else {
-		my $res = `$cmd`;
-		log_i($res);
+	log_i("Killing browser process(${num} process)...");
+	my @pnames = ('chrome', 'chromium');
+	foreach my $name (@pnames) {
+		my $cmd = "pkill ${name}";
+		if (defined $config{is_debug}) {
+			log_i("DEBUG - $cmd");
+		} else {
+			my $res = `$cmd`;
+			log_i($res);
+		}
 	}
 }
 
@@ -340,13 +358,9 @@ sub update_repo {
 		return;
 	}
 
-	# Test run
-	my @a = @ARGV;
-	push(@a, '--no-update');
-	push(@a, '--test');
-	my $res = `$^X $0 @a`;
-	if ($res !~ /Test done/) {
-		log_e("Test run was FAILED");
+	# Self-test
+	if (!test_myself()) {
+		log_e("Self-test was FAILED");
 		# Revert
 		if (!defined $config{is_debug}) {
 			log_i("[Failsafe] Reverting revision...");
@@ -357,8 +371,8 @@ sub update_repo {
 		return;
 	}
 
-	log_i("Test run was successful");
-	log_i("Updating completed\n");
+	log_i("Self-test was successful");
+	log_i("Update has been completed\n");
 }
 
 # Set sleeping state of display
@@ -444,6 +458,19 @@ sub restart_myself {
 	# Restart myself
 	log_i("Restarting...");
 	exec($^X, $0, @ARGV);
+}
+
+# Test myself
+sub test_myself {
+	# Test run
+	my @a = @ARGV;
+	push(@a, '--no-update');
+	push(@a, '--test');
+	my $res = `$^X $0 @a`;
+	if ($res !~ /Test done/) {
+		return undef;
+	}
+	return 1;
 }
 
 # Read content from specified file
