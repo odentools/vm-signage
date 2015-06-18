@@ -1,3 +1,4 @@
 cpanfile.snapshot
 config/signage-device.conf
 local/
+log/

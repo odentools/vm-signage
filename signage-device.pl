@@ -58,6 +58,7 @@ $fc->run(
 
 # Connect to control server with using WebSocket
 our $ua = undef;
+our $webSocketTx = undef;
 connect_server();
 
 # Prepare for display sleeping
@@ -135,6 +136,9 @@ sub check_configs {
 			}
 		}
 	}
+	if (defined $config{is_control_server_logging} && $config{is_control_server_logging} != 1) {
+		$config{is_control_server_logging} = undef;
+	}
 }
 
 # Check a parameter
@@ -183,11 +187,13 @@ sub connect_server {
 		my ($ua, $tx) = @_;
 		if (!$tx->is_websocket) {
 			log_e("WebSocket handshake FAILED: ${ws_url}notif");
+			$webSocketTx = undef;
 			# Restart myself
 			restart_myself();
 			exit;
 		}
 		log_i("WebSocket connected");
+		$webSocketTx = $tx;
 
 		# Check latest revision of repository
 		$tx->send({ json => {
@@ -249,6 +255,7 @@ sub connect_server {
 		$tx->on(finish => sub { # Closed
 			my ($s, $code, $reason) = @_;
 			log_i("WebSocket connection closed ... Code=$code");
+			$webSocketTx = undef;
 			# Restart myself
 			wait_sec(10);
 			restart_myself();
@@ -469,9 +476,21 @@ sub slurp {
 sub log_i {
 	my ($mes, $opt_no_break_line) = @_;
 	my $now = time();
-	print "[INFO:$now:$$]  $mes";
+	my $line = "[INFO:$now:$$]  $mes";
+
+	# Logging on server
+	if (defined $config{is_control_server_logging} && defined $webSocketTx) {
+		$webSocketTx->send({ json => {
+			cmd => 'post-log',
+			log_text => $line,
+		}});
+	}
+
+	# Output message
 	if (!defined $opt_no_break_line || !$opt_no_break_line) {
-		print "\n";
+		print $line . "\n";
+	} else {
+		print $line;
 	}
 }
 
@@ -479,9 +498,20 @@ sub log_i {
 sub log_e {
 	my ($mes, $opt_is_die) = @_;
 	my $now = time();
+	my $line = "[ERROR:$now]  $mes";
+
+	# Logging on server
+	if (defined $config{is_control_server_logging} && defined $webSocketTx) {
+		$webSocketTx->send({ json => {
+			cmd => 'post-log',
+			log_text => $line,
+		}});
+	}
+
+	# Output message or die
 	if (defined $opt_is_die && $opt_is_die) {
-		die "[ERROR:$now]  $mes";
+		die $line;
 	} else {
-		print "[ERROR:$now]  $mes\n";
+		print $line . "\n";
 	}
 }
