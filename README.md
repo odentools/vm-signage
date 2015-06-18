@@ -35,9 +35,9 @@ that's enough only to run the [Step.4](#installation-rpi) of Installation steps 
 
 In addition, please attention to followings:
 * About configuration-file (config/signage-device.conf):
-    * *control_server_ws_url* and *git_cloned_dir_path* parameter should be empty (*undef*).
+	* *control_server_ws_url* and *git_cloned_dir_path* parameter should be empty (*undef*).
 * About repository URL:
-    * The *YOURNAME* part should be replace to "mugifly"; e.g., https://github.com/mugifly/vm-signage.git
+	* The *YOURNAME* part should be replace to "mugifly"; e.g., https://github.com/mugifly/vm-signage.git
 
 Let turn on your Raspberry Pi!
 
@@ -55,10 +55,10 @@ It will be also easier merging from upstream repository.
 
 Please run the following commands on your computer:
 
-    $ git clone https://github.com/YOURNAME/vm-signage.git
-    $ cd vm-signage/
-    $ git checkout -b my-signage
-    $ git push origin my-signage
+	$ git clone https://github.com/YOURNAME/vm-signage.git
+	$ cd vm-signage/
+	$ git checkout -b my-signage
+	$ git push origin my-signage
 
 When you customize this kit, you should make a customizing into this *my-signage* branch.
 
@@ -71,21 +71,21 @@ And install the [Heroku Toolbelt](https://toolbelt.heroku.com/) on your computer
 
 Then please run the following commands on the cloned directory by Step.2:
 
-    $ heroku create --buildpack https://github.com/kazeburo/heroku-buildpack-perl-procfile.git
-    $ git push heroku master
-    $ heroku open
+	$ heroku create --buildpack https://github.com/kazeburo/heroku-buildpack-perl-procfile.git
+	$ git push heroku master
+	$ heroku open
 
 
 ### 4. Installation of Signage-device on Raspberry Pi <a name="installation-rpi"></a>
 
 Firstly, run the following commands on your Raspberry Pi:
 
-    $ sudo apt-get install perl git chromium x11-xserver-utils
-    $ sudo cpan install Carton
-    $ cd ~
-    $ git clone https://github.com/YOURNAME/vm-signage.git
-    $ cd vm-signage/
-    $ carton install
+	$ sudo apt-get install perl git chromium x11-xserver-utils
+	$ sudo cpan install Carton
+	$ cd ~
+	$ git clone https://github.com/YOURNAME/vm-signage.git
+	$ cd vm-signage/
+	$ carton install
 
 (NOTE: If connected network needed a proxy to access WAN, you should run the command  that like follows before above commands: $ export http_proxy="http://proxy.example.com:8080". Then when the run the sudo command, you might want to add -E option.)
 
@@ -112,9 +112,10 @@ Then, make a configuration-file as follows: *config/signage-device.conf*
 	http_proxy => 'http://proxy.example.com:8080', # Or undef
 
 	# Control server (Optional; Websocket URL of deployed server)
-	control_server_ws_url => 'wss://example.herokuapp.com/', # Or undef
+	control_server_ws_url => 'ws://example.herokuapp.com/', # Or undef
+	is_control_server_logging => 1, # 1 = True, 0 = False
 
-	# Auto updating with using Git (Optional)
+	# Auto updator with using Git (Optional)
 	git_cloned_dir_path => '/home/pi/vm-signage/', # Or undef
 	git_repo_name => 'origin',
 	git_branch_name => 'my-signage',
@@ -136,7 +137,7 @@ After that, add the following line into the LXDE autostart file: *~/.config/lxse
 
 Finally, You must reboot the Raspberry Pi.
 
-    $ sudo shutdown -r now
+	$ sudo shutdown -r now
 
 ### 5. Add Webhook on GitHub
 
@@ -160,14 +161,14 @@ And add some @xset lines.
 
 */etc/xdg/lxsession/LXDE/autostart*
 
-    #@xscreensaver -no-splash
+	#@xscreensaver -no-splash
 
 */etc/xdg/lxsession/LXDE-pi/autostart*
 
-    #@xscreensaver -no-splash
-    @xset s off
-    @xset -dpms
-    @xset s noblank
+	#@xscreensaver -no-splash
+	@xset s off
+	@xset -dpms
+	@xset s noblank
 
 ### How to customize multiple signage devices
 

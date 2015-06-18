@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use FindBin;
 use Mojo::UserAgent;
-use Parallel::ForkManager;
+use Mojo::IOLoop::ForkCall;
 use Time::Piece;
 
 our @CHROMIUM_OPTIONS = qw|
@@ -26,30 +26,39 @@ check_configs();
 # Read parameters
 check_params();
 
-# Fork of process for browser startup
-my $pm = Parallel::ForkManager->new(1);
-my $childProcessId;
-$pm->run_on_finish( sub { # Callback when child process exit or die
-	my ($pid, $exit_code, $ident, $exit_signal, $core_dump, $data_structure_reference) = @_;
-	$childProcessId = undef;
-});
-$childProcessId = $pm->start;
-if ($childProcessId == 0) { # Child process
-	$SIG{__DIE__} = sub { $pm->finish(-1); };
-	# Wait
-	if (defined $config{startup_wait_sec}) {
-		wait_sec($config{startup_wait_sec});
-	}
-	# Start browser for signage by child process
-	kill_signage_browser();
-	start_signage_browser();
-	# End of child process
-	$pm->finish(0);
-	exit;
+# Wait
+if (defined $config{startup_wait_sec}) {
+	wait_sec($config{startup_wait_sec});
 }
 
+# Fork of process for browser startup
+my $fc = Mojo::IOLoop::ForkCall->new();
+$fc->run(
+	# Processing in child process
+	sub {
+		my @args = @_;
+
+		# Start browser for signage by child process
+		kill_signage_browser();
+		start_signage_browser();
+
+		# End of child process
+		return ();
+	},
+	# Arguments
+	[],
+	# Callback
+	sub {
+		my ($fc, $err, @return) = @_;
+		if (defined $err) {
+			log_e($err);
+		}
+	}
+);
+
 # Connect to control server with using WebSocket
-my $ua = undef;
+our $ua = undef;
+our $webSocketTx = undef;
 connect_server();
 
 # Prepare for display sleeping
@@ -64,22 +73,28 @@ log_i("Initialize completed");
 if (defined $config{is_test}) { # Test mode
 	log_i("Test done");
 	# Quit
-	quit_myself();
 	exit;
 }
 
 # Define main loop
 my $is_sleeping = -1; # This flag may be reset by restarting of script
-my $id = Mojo::IOLoop->recurring(2 => sub {
+my $id = Mojo::IOLoop->recurring(10 => sub {
 	my $now_s = int(Time::Piece::localtime->strftime('%H%M'));
-	if ($sleep_begin_time != 0 && ($sleep_begin_time <= $now_s || $now_s < $sleep_end_time)) {
+	if ($sleep_begin_time != 0 && (
+		($sleep_begin_time <= $now_s && $now_s < $sleep_end_time) ||
+		($sleep_end_time <= $sleep_begin_time && $now_s <= $sleep_begin_time && $now_s < $sleep_end_time)
+	)) {
 		if ($is_sleeping != 1) {
 			# Start display sleeping
 			$is_sleeping = 1;
 			set_display_power(0);
 		}
 	} elsif ($sleep_end_time != 0 && $sleep_end_time <= $now_s) {
-		if ($is_sleeping != 0) {
+		if ($is_sleeping == -1) { # On initial
+			# End display sleeping
+			$is_sleeping = 0;
+			set_display_power(1);
+		} elsif ($is_sleeping != 0) {
 			# End display sleeping
 			$is_sleeping = 0;
 			set_display_power(1);
@@ -94,7 +109,6 @@ my $id = Mojo::IOLoop->recurring(2 => sub {
 Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 
 # Quit
-quit_myself();
 exit;
 
 # ----
@@ -121,6 +135,9 @@ sub check_configs {
 				log_e("Config - $_ undefined", 1);
 			}
 		}
+	}
+	if (defined $config{is_control_server_logging} && $config{is_control_server_logging} != 1) {
+		$config{is_control_server_logging} = undef;
 	}
 }
 
@@ -162,18 +179,21 @@ sub connect_server {
 	$ua = Mojo::UserAgent->new();
 	if (defined $config{http_proxy}) {
 		$ua->proxy->http($config{http_proxy})->https($config{http_proxy});
+		log_i("Connecting with Proxy");
 	}
-	$ua->inactivity_timeout(3600); # 60min
+	$ua = $ua->connect_timeout(60);
+	$ua = $ua->inactivity_timeout(3600); # 60min
 	$ua->websocket($ws_url.'notif' => sub {
 		my ($ua, $tx) = @_;
 		if (!$tx->is_websocket) {
 			log_e("WebSocket handshake FAILED: ${ws_url}notif");
+			$webSocketTx = undef;
 			# Restart myself
-			wait_sec(5);
 			restart_myself();
 			exit;
 		}
 		log_i("WebSocket connected");
+		$webSocketTx = $tx;
 
 		# Check latest revision of repository
 		$tx->send({ json => {
@@ -183,8 +203,22 @@ sub connect_server {
 		# Set event handler
 		$tx->on(json => sub { # Incomming message
 			my ($tx, $hash) = @_;
-			if ($hash->{cmd} eq 'repository-updated' && $hash->{branch} eq $config{git_branch_name}) { # On repository updated
-				log_i("Repository updated");
+			if ($hash->{cmd} eq 'restart') { # Restart request
+				log_i("Received: Restart request");
+
+				# Self-testing
+				if (!test_myself()) {
+					log_i("[WARN] Self-test was FAILED; So restart does not allowed.");
+					return;
+				}
+
+				# Restart myself
+				$tx->finish;
+				wait_sec(5);
+				restart_myself();
+				exit;
+			} elsif ($hash->{cmd} eq 'repository-updated' && $hash->{branch} eq $config{git_branch_name}) { # On repository updated
+				log_i("Received: Repository updated");
 				# Update repository
 				update_repo();
 				# Restart myself
@@ -215,18 +249,20 @@ sub connect_server {
 					}
 				}
 			} else {
-				warn '[WARN] Received unknown command ... ' . Mojo::JSON::encode_json($hash);
+				log_i('[WARN] Received unknown command ... ' . Mojo::JSON::encode_json($hash));
 			}
 		});
 		$tx->on(finish => sub { # Closed
 			my ($s, $code, $reason) = @_;
 			log_i("WebSocket connection closed ... Code=$code");
+			$webSocketTx = undef;
 			# Restart myself
 			wait_sec(10);
 			restart_myself();
 			exit;
 		});
 	});
+	log_i("WebSocket connecting...");
 }
 
 # Start signage browser
@@ -263,13 +299,16 @@ sub kill_signage_browser {
 	}
 
 	# Kill existed browser process
-	log_i("Killing browser process(${num})...");
-	my $cmd = "pkill chrome && pkill chromium";
-	if (defined $config{is_debug}) {
-		log_i("DEBUG - $cmd");
-	} else {
-		my $res = `$cmd`;
-		log_i($res);
+	log_i("Killing browser process(${num} process)...");
+	my @pnames = ('chrome', 'chromium');
+	foreach my $name (@pnames) {
+		my $cmd = "pkill ${name}";
+		if (defined $config{is_debug}) {
+			log_i("DEBUG - $cmd");
+		} else {
+			my $res = `$cmd`;
+			log_i($res);
+		}
 	}
 }
 
@@ -300,6 +339,27 @@ sub update_repo {
 
 	# Update of dependent libraries
 	log_i("Updating dependent libraries...");
+	update_libs();
+
+	# Self-test
+	if (!test_myself()) {
+		log_e("Self-test was FAILED");
+		# Revert
+		if (!defined $config{is_debug}) {
+			log_i("[Failsafe] Reverting revision...");
+			`$config{git_bin_path} fetch $config{git_repo_name} $config{git_branch_name}`;
+			`$config{git_bin_path} reset --hard FETCH_HEAD~1`;
+			log_i("[Failsafe] Reverted to " . get_repo_rev());
+		}
+		return;
+	}
+
+	log_i("Self-test was successful");
+	log_i("Update has been completed\n");
+}
+
+# Update of dependent libraries
+sub update_libs {
 	if (defined $config{http_proxy} && $config{http_proxy} ne '') {
 		$ENV{HTTP_PROXY} = $config{http_proxy};
 		$ENV{http_proxy} = $config{http_proxy};
@@ -318,28 +378,9 @@ sub update_repo {
 			`$config{git_bin_path} reset --hard FETCH_HEAD~1`;
 			log_i("[Failsafe] Reverted to " . get_repo_rev());
 		}
-		return;
+		return undef;
 	}
-
-	# Test run
-	my @a = @ARGV;
-	push(@a, '--no-update');
-	push(@a, '--test');
-	my $res = `$^X $0 @a`;
-	if ($res !~ /Test done/) {
-		log_e("Test run was FAILED");
-		# Revert
-		if (!defined $config{is_debug}) {
-			log_i("[Failsafe] Reverting revision...");
-			`$config{git_bin_path} fetch $config{git_repo_name} $config{git_branch_name}`;
-			`$config{git_bin_path} reset --hard FETCH_HEAD~1`;
-			log_i("[Failsafe] Reverted to " . get_repo_rev());
-		}
-		return;
-	}
-
-	log_i("Test run was successful");
-	log_i("Updating completed\n");
+	return 1;
 }
 
 # Set sleeping state of display
@@ -402,29 +443,24 @@ sub add_inc_lib {
 	}
 }
 
-# Pretreatment for quit myself
-sub quit_myself {
-	# Cleanup of child process and manager
-	if (defined $childProcessId) {
-		kill("KILL", $childProcessId);
-	}
-	if (defined $pm) {
-		$pm->wait_all_children; # No more zombies...
-	}
-}
-
 # Restart script
 sub restart_myself {
-	# Cleanup of child process and manager
-	if (defined $childProcessId) {
-		kill("KILL", $childProcessId);
-	}
-	if (defined $pm) {
-		$pm->wait_all_children; # No more zombies...
-	}
 	# Restart myself
 	log_i("Restarting...");
 	exec($^X, $0, @ARGV);
+}
+
+# Test myself
+sub test_myself {
+	# Test run
+	my @a = @ARGV;
+	push(@a, '--no-update');
+	push(@a, '--test');
+	my $res = `$^X $0 @a`;
+	if ($res !~ /Test done/) {
+		return undef;
+	}
+	return 1;
 }
 
 # Read content from specified file
@@ -440,9 +476,25 @@ sub slurp {
 sub log_i {
 	my ($mes, $opt_no_break_line) = @_;
 	my $now = time();
-	print "[INFO:$now:$$]  $mes";
+	my $line = "[INFO:$now:$$]  $mes";
+
+	# Logging on server
+	if (defined $config{is_control_server_logging} && defined $webSocketTx) {
+		eval {
+			$webSocketTx->send({ json => {
+				cmd => 'post-log',
+				log_text => $line,
+			}});
+		}; if ($@) {
+			print "[ERROR:$now] WebSocket error - $@\n";
+		}
+	}
+	
+	# Output message
 	if (!defined $opt_no_break_line || !$opt_no_break_line) {
-		print "\n";
+		print $line . "\n";
+	} else {
+		print $line;
 	}
 }
 
@@ -450,9 +502,24 @@ sub log_i {
 sub log_e {
 	my ($mes, $opt_is_die) = @_;
 	my $now = time();
+	my $line = "[ERROR:$now]  $mes";
+
+	# Logging on server
+	if (defined $config{is_control_server_logging} && defined $webSocketTx) {
+		eval {
+			$webSocketTx->send({ json => {
+				cmd => 'post-log',
+				log_text => $line,
+			}});
+		}; if ($@) {
+			print "[ERROR:$now] WebSocket error - $@\n";
+		}
+	}
+
+	# Output message or die
 	if (defined $opt_is_die && $opt_is_die) {
-		die "[ERROR:$now]  $mes";
+		die $line;
 	} else {
-		print "[ERROR:$now]  $mes\n";
+		print $line . "\n";
 	}
 }

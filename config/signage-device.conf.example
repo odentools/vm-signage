@@ -10,9 +10,10 @@
 	http_proxy => undef,
 
 	# Control server (Optional; Websocket URL of deployed server)
-	control_server_ws_url => 'wss://example.herokuapp.com/',
-	
-	# Auto updating with using Git (Optional)
+	control_server_ws_url => 'ws://example.herokuapp.com/',
+	is_control_server_logging => 1, # 1 = True, 0 = False
+
+	# Auto updator with using Git (Optional)
 	git_cloned_dir_path => '/home/pi/vm-signage/',
 	git_repo_name => 'origin',
 	git_branch_name => 'master',
