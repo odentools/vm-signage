@@ -20,6 +20,7 @@ our %repo_revs = ();
 app->config(
 	hypnotoad => {
 		listen => [ 'http://*:' . ( $ENV{PORT} || 80 ) ],
+		workers => 1,
 	},
 );
 
