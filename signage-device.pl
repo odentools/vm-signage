@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-# VM Signare - Signature device
+# VM Signage - Signage device
 use strict;
 use warnings;
 use FindBin;
@@ -12,8 +12,9 @@ our @CHROMIUM_OPTIONS = qw|
 --disable-session-crashed-bubble
 --disable-restore-background-contents
 --disable-new-tab-first-run
---disable-restore-session-stat
+--disable-restore-session-state
 --disk-cache-dir=/dev/null
+--incognito
 |;
 
 # Disable buffering
@@ -197,7 +198,7 @@ sub connect_server {
 
 		# Check latest revision of repository
 		$tx->send({ json => {
-				cmd => 'get-latest-repo-rev',
+			cmd => 'get-latest-repo-rev',
 		}});
 
 		# Set event handler
@@ -209,7 +210,7 @@ sub connect_server {
 
 			} elsif ($hash->{cmd} eq 'restart') { # Restart request
 				log_i("Received: Restart request");
-				
+
 				# Self-testing
 				if (!test_myself()) {
 					log_i("[WARN] Self-test was FAILED; So restart does not allowed.");
