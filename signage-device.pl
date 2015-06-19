@@ -203,9 +203,13 @@ sub connect_server {
 		# Set event handler
 		$tx->on(json => sub { # Incomming message
 			my ($tx, $hash) = @_;
-			if ($hash->{cmd} eq 'restart') { # Restart request
-				log_i("Received: Restart request");
 
+			if ($hash->{cmd} eq 'device-ping') { # On ping received
+				return;
+
+			} elsif ($hash->{cmd} eq 'restart') { # Restart request
+				log_i("Received: Restart request");
+				
 				# Self-testing
 				if (!test_myself()) {
 					log_i("[WARN] Self-test was FAILED; So restart does not allowed.");
@@ -217,6 +221,7 @@ sub connect_server {
 				wait_sec(5);
 				restart_myself();
 				exit;
+
 			} elsif ($hash->{cmd} eq 'repository-updated' && $hash->{branch} eq $config{git_branch_name}) { # On repository updated
 				log_i("Received: Repository updated");
 				# Update repository
@@ -489,7 +494,7 @@ sub log_i {
 			print "[ERROR:$now] WebSocket error - $@\n";
 		}
 	}
-	
+
 	# Output message
 	if (!defined $opt_no_break_line || !$opt_no_break_line) {
 		print $line . "\n";
