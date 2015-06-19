@@ -97,6 +97,11 @@ websocket '/notif' => sub {
 			if ($hash->{cmd} eq 'post-log') { # Posting of log
 				$s->write_device_log($client_id, $hash->{log_text});
 
+			} elsif ($hash->{cmd} eq 'set-device-info') { # Set of device information
+				if (!defined $deviceClients{$client_id}->{config}) {
+					$deviceClients{$client_id}->{config} = $hash->{device_info}->{config};
+				}
+
 			} elsif ($hash->{cmd} eq 'get-latest-repo-rev') { # Getting of latest revision of repository
 				$s->app->log->debug("Received cmd - " . $hash->{cmd});
 				$tx->send({ json => {

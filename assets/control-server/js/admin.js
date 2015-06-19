@@ -25,7 +25,7 @@ $(function () {
 			$li.append($name);
 
 			var $info = $('<span/>');
-			$info.text(d);
+			$info.text(JSON.stringify(d));
 			$li.append($info);
 
 			$device_list.append($li);
