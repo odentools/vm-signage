@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-# VM Signare - Signature device
+# VM Signage - Signage device
 use strict;
 use warnings;
 use FindBin;
@@ -12,8 +12,9 @@ our @CHROMIUM_OPTIONS = qw|
 --disable-session-crashed-bubble
 --disable-restore-background-contents
 --disable-new-tab-first-run
---disable-restore-session-stat
+--disable-restore-session-state
 --disk-cache-dir=/dev/null
+--incognito
 |;
 
 # Disable buffering
@@ -195,15 +196,27 @@ sub connect_server {
 		log_i("WebSocket connected");
 		$webSocketTx = $tx;
 
+		# Send device information
+		$tx->send({ json => {
+			cmd => 'set-device-info',
+			device_info => {
+				config => \%config,
+			},
+		}});
+
 		# Check latest revision of repository
 		$tx->send({ json => {
-				cmd => 'get-latest-repo-rev',
+			cmd => 'get-latest-repo-rev',
 		}});
 
 		# Set event handler
 		$tx->on(json => sub { # Incomming message
 			my ($tx, $hash) = @_;
-			if ($hash->{cmd} eq 'restart') { # Restart request
+
+			if ($hash->{cmd} eq 'device-ping') { # On ping received
+				return;
+
+			} elsif ($hash->{cmd} eq 'restart') { # Restart request
 				log_i("Received: Restart request");
 
 				# Self-testing
@@ -217,6 +230,7 @@ sub connect_server {
 				wait_sec(5);
 				restart_myself();
 				exit;
+
 			} elsif ($hash->{cmd} eq 'repository-updated' && $hash->{branch} eq $config{git_branch_name}) { # On repository updated
 				log_i("Received: Repository updated");
 				# Update repository
@@ -489,7 +503,7 @@ sub log_i {
 			print "[ERROR:$now] WebSocket error - $@\n";
 		}
 	}
-	
+
 	# Output message
 	if (!defined $opt_no_break_line || !$opt_no_break_line) {
 		print $line . "\n";
