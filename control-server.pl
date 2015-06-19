@@ -130,7 +130,7 @@ websocket '/notif' => sub {
 	return;
 };
 
-# GitHub Webhook receiver
+# Webhook receiver for pushed on GitHub
 any '/github-webhook-receiver' => sub {
 	my $s = shift;
 
@@ -160,6 +160,46 @@ any '/github-webhook-receiver' => sub {
 	});
 
 	$s->render(text => 'OK:' . $branch);
+};
+
+# Webhook receiver for general
+any '/webhook-receiver' => sub {
+	my $s = shift;
+
+	if (!defined $ENV{VM_SIGNAGE_WEBHOOK_KEY}) {
+		my $msg = <<EOF;
+For using webhook receiver, You must defined VM_SIGNAGE_WEBHOOK_KEY on Environment variables.
+EOF
+		$s->render(text => $msg, status => 400);
+		return;
+	} elsif (!defined $s->param('webhook_key')) {
+		$s->render(text => "webhook_key parameter was not presented.", status => 400);
+		return;
+	}
+
+	# Check for key
+	if ($s->param('webhook_key') ne $ENV{VM_SIGNAGE_WEBHOOK_KEY}) {
+		$s->render(text => "webhook_key parameter was not matched with value of VM_SIGNAGE_WEBHOOK_KEY.", status => 401);
+		return;
+	}
+
+	# Check for command
+	my $is_success = 0;
+	my $cmd = $s->param('cmd') || undef;
+	if ($cmd eq 'restart') {
+		# Insert a notification-task to queue
+		$s->push_queue_to_redis('notify-to-clients', {
+			cmd => 'restart',
+		});
+		$is_success = 1;
+	}
+
+	if ($is_success == 0) {
+		$s->render(text => 'cmd parameter was invalid or failed');
+		return;
+	}
+
+	$s->render(text => "OK:${cmd}");
 };
 
 # Administrator console
