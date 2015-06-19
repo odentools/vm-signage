@@ -5,7 +5,7 @@ $(function () {
 		var $li = $('<li/>');
 		var now = new Date();
 		if (sender == undefined) {
-			sender = "System";
+			sender = "Me";
 		}
 		$li.text("[" + sender + "] " + now + " - " + msg);
 		$('#logger').prepend($li);
@@ -19,7 +19,15 @@ $(function () {
 		for (var i = 0, l = devices.length; i < l; i++) {
 			var d = devices[i];
 			var $li = $('<li/>');
-			$li.text(d.id);
+
+			var $name = $('<p/>');
+			$name.text(d.name);
+			$li.append($name);
+
+			var $info = $('<span/>');
+			$info.text(d);
+			$li.append($info);
+
 			$device_list.append($li);
 		}
 	};
@@ -63,6 +71,7 @@ $(function () {
 		if (data.cmd == "log") {
 			writeLog(data.log_text, data.log_from);
 		} else if (data.cmd == "device-list") {
+			console.log(data.devices); // TODO
 			updateDeviceList(data.devices);
 		}
 	};

@@ -6,8 +6,8 @@ use Mojo::JSON;
 # ----
 
 # Initialize hash / array for WebSocket
-our %deviceClients = ();
-our %adminClients = ();
+our %deviceClients = (); # Key: Tx string, Value: Hash-ref
+our %adminClients = (); # Key: Tx string, Value: Tx
 our %adminWsKeys = (); # Key: Websocket auth key, Value: Generated date epoch-sec
 
 # Initialize array of Id for processed queue
@@ -46,14 +46,14 @@ app->helper(push_queue_to_redis => sub {
 		}));
 	} else {
 		foreach my $id (keys %deviceClients) {
-			$deviceClients{$id}->send(Mojo::JSON::encode_json($content));
+			$deviceClients{$id}->{tx}->send(Mojo::JSON::encode_json($content));
 		}
 	}
 });
 
 # Helper - Log
 app->helper(write_device_log => sub {
-	my ($s, $device_id, $message) = @_;
+	my ($s, $device_name, $message) = @_;
 
 	# Output to log
 	$s->app->log->debug("Device log - ${message}");
@@ -62,7 +62,7 @@ app->helper(write_device_log => sub {
 	foreach my $id (keys %adminClients) {
 		$adminClients{$id}->send(Mojo::JSON::encode_json({
 			cmd => 'log',
-			log_from => $device_id,
+			log_from => $device_name,
 			log_text => $message,
 		}));
 	}
@@ -77,12 +77,16 @@ websocket '/notif' => sub {
 
 	# Insert connection into clients hash
 	my $client_id = sprintf("%s", $s->tx);
-	$deviceClients{$client_id} = $s->tx;
-
-	my $device_id = $client_id;
-	if ($device_id =~ /HASH\((.+)\)/) {
-		$device_id = $1;
+	my $device_name = $client_id;
+	if ($device_name =~ /HASH\((.+)\)/) {
+		$device_name = $1;
 	}
+	$deviceClients{$client_id} = {
+		name => $device_name,
+		tx => $s->tx,
+		connected_at => time(),
+		config => undef,
+	};
 
 	# Set event handlers
 
@@ -91,7 +95,7 @@ websocket '/notif' => sub {
 		if (defined $hash->{cmd}) {
 
 			if ($hash->{cmd} eq 'post-log') { # Posting of log
-				$s->write_device_log($device_id, $hash->{log_text});
+				$s->write_device_log($client_id, $hash->{log_text});
 
 			} elsif ($hash->{cmd} eq 'get-latest-repo-rev') { # Getting of latest revision of repository
 				$s->app->log->debug("Received cmd - " . $hash->{cmd});
@@ -113,10 +117,10 @@ websocket '/notif' => sub {
 
 		delete $deviceClients{$client_id};
 
-		$s->write_device_log($device_id, "Device diconnected - Code = " . $code);
+		$s->write_device_log($client_id, "Device diconnected - Code = " . $code);
 	});
 
-	$s->write_device_log($device_id, "Device connected");
+	$s->write_device_log($client_id, "Device connected");
 
 	return;
 };
@@ -233,21 +237,15 @@ websocket '/admin/ws/:wsKey' => sub {
 my $id = Mojo::IOLoop->recurring(5 => sub {
 	# Make the signage device list
 	my @devices = ();
-	foreach my $d_id (keys %deviceClients) {
-		my $device_id = $d_id;
-		if ($d_id =~ /HASH\((.+)\)/) {
-			$device_id = $1;
-		}
-
-		push(@devices, {
-			id => $device_id,
-		});
+	foreach my $id (keys %deviceClients) {
+		my %device = %{$deviceClients{$id}};
+		push(@devices, \%device);
 	}
 
 	# Ping to signage devices
-	foreach my $d_id (keys %deviceClients) {
+	foreach my $id (keys %deviceClients) {
 		eval {
-			$deviceClients{$d_id}->send(Mojo::JSON::encode_json({
+			$deviceClients{$id}->{tx}->send(Mojo::JSON::encode_json({
 				cmd => 'device-ping',
 				created_at => time(),
 			}));

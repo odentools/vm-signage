@@ -196,6 +196,14 @@ sub connect_server {
 		log_i("WebSocket connected");
 		$webSocketTx = $tx;
 
+		# Send device information
+		$tx->send({ json => {
+			cmd => 'set-device-info',
+			device_info => {
+				config => \%config,
+			},
+		}});
+
 		# Check latest revision of repository
 		$tx->send({ json => {
 			cmd => 'get-latest-repo-rev',
