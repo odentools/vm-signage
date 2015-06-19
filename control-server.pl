@@ -244,6 +244,7 @@ my $id = Mojo::IOLoop->recurring(5 => sub {
 	my @devices = ();
 	foreach my $id (keys %deviceClients) {
 		my %device = %{$deviceClients{$id}};
+		delete $device{tx}; # Delete property from copied hash
 		push(@devices, \%device);
 	}
 
