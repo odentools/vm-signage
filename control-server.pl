@@ -231,7 +231,7 @@ websocket '/admin/ws/:wsKey' => sub {
 
 # Loop for ping and queue checking
 my $id = Mojo::IOLoop->recurring(5 => sub {
-	# Make a device list
+	# Make the signage device list
 	my @devices = ();
 	foreach my $d_id (keys %deviceClients) {
 		my $device_id = $d_id;
@@ -244,13 +244,25 @@ my $id = Mojo::IOLoop->recurring(5 => sub {
 		});
 	}
 
+	# Ping to signage devices
+	foreach my $d_id (keys %deviceClients) {
+		eval {
+			$deviceClients{$d_id}->send(Mojo::JSON::encode_json({
+				cmd => 'device-ping',
+				created_at => time(),
+			}));
+		};
+	}
+
 	# Ping to admin console
 	foreach my $id (keys %adminClients) {
 		# Send to admin console
-		$adminClients{$id}->send(Mojo::JSON::encode_json({
-			cmd => 'device-list',
-			devices => \@devices
-		}));
+		eval {
+			$adminClients{$id}->send(Mojo::JSON::encode_json({
+				cmd => 'device-list',
+				devices => \@devices
+			}));
+		};
 	}
 
 	# Queue checking
