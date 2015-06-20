@@ -340,6 +340,9 @@ __DATA__
 		</script>
 		%= javascript '/js/admin.js'
 		<style>
+			#deviceList .device-caption a {
+				margin-left: 10px;
+			}
 			#deviceList .device-info {
 				font-size: 80%;
 			}
