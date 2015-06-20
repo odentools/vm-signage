@@ -21,12 +21,18 @@ $(function () {
 			var $li = $('<li/>');
 
 			var $name = $('<p/>');
-			if (d.config != null && d.git_branch_name != null) {
-				$name.text(d.name + ' (' + d.git_branch_name + ')');
+			if (d.config != null && d.config.git_branch_name != null) {
+				$name.text(d.name + ' (' + d.config.git_branch_name + ')');
 			} else {
 				$name.text(d.name);
 			}
 			$li.append($name);
+
+			if (d.config != null && d.config.signage_page_url != null) {
+				var $page_link = $('<a/>');
+				$page_link.attr('href', d.config.signage_page_url);
+				$li.append($page_link);
+			}
 
 			var $info = $('<span/>');
 			$info.text(JSON.stringify(d));
