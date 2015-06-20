@@ -61,6 +61,7 @@ $fc->run(
 # Connect to control server with using WebSocket
 our $ua = undef;
 our $webSocketTx = undef;
+our $pingReceivedAt = -1;
 connect_server();
 
 # Prepare for display sleeping
@@ -81,6 +82,15 @@ if (defined $config{is_test}) { # Test mode
 # Define main loop
 my $is_sleeping = -1; # This flag may be reset by restarting of script
 my $id = Mojo::IOLoop->recurring(10 => sub {
+	my $now = time();
+	if ($pingReceivedAt != -1 && 60 < ($now - $pingReceivedAt)) { # If not received ping in 60 sec
+		log_i("Not received a ping during 60 seconds");
+		$webSocketTx = undef;
+		# Restart myself
+		wait_sec(10);
+		restart_myself();
+	}
+
 	my $now_s = int(Time::Piece::localtime->strftime('%H%M'));
 	if ($sleep_begin_time != 0 && (
 		($sleep_begin_time <= $now_s && $now_s < $sleep_end_time) ||
@@ -216,6 +226,7 @@ sub connect_server {
 			my ($tx, $hash) = @_;
 
 			if ($hash->{cmd} eq 'device-ping') { # On ping received
+				$pingReceivedAt = time();
 				return;
 
 			} elsif ($hash->{cmd} eq 'restart') { # Restart request
