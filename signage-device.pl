@@ -387,6 +387,7 @@ sub get_repo_rev {
 	chdir($config{git_cloned_dir_path});
 	my $rev = `$config{git_bin_path} show -s --format=%H`;
 	chomp($rev);
+	$rev =~ s/[^0-9a-zA-Z]//g;
 	return $rev;
 }
 
