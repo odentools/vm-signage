@@ -43,12 +43,12 @@ Let turn on your Raspberry Pi!
 
 ## Installation
 
-### 1. Forking of Repository
+### 1. Forking the repository
 
 If you will customize this kit, firstlly, You should fork the repository from upstream (https://github.com/mugifly/vm-signage).
 If you don't have GitHub account, please make the account OR use [Quick Installation](#quick-installation).
 
-### 2. Git-clone and Making of Branch <a name="installation-gitclone"></a>
+### 2. Git-clone and making a branch <a name="installation-gitclone"></a>
 
 To easier customizing, You should make a new branch.
 It will be also easier merging from upstream repository.
@@ -80,7 +80,7 @@ Then please run the following commands on the cloned directory by Step.2:
 
 Firstly, run the following commands on your Raspberry Pi:
 
-	$ sudo apt-get install perl git chromium x11-xserver-utils
+	$ sudo apt-get install perl git chromium x11-xserver-utils libssl-dev
 	$ sudo cpan install Carton
 	$ cd ~
 	$ git clone https://github.com/YOURNAME/vm-signage.git
@@ -135,9 +135,16 @@ After that, add the following line into the LXDE autostart file: *~/.config/lxse
 @/bin/bash ~/vm-signage/start.sh
 ````
 
-Finally, You must reboot the Raspberry Pi.
+Finally, please try to test-running.
+
+	$ cd ~/vm-signage/
+	$ carton exec -- perl signage-device.pl --test
+
+If you see "Test done", it means testing was successful; Please reboot the Raspberry Pi.
 
 	$ sudo shutdown -r now
+
+Now, Your signage device is ready!
 
 ### 5. Add Webhook on GitHub
 
@@ -149,6 +156,32 @@ please register the following settings on the "Webhook" section of "Settings - W
 * Secret: (empty)
 * Which events would you like to trigger this webhook?: Just the push event
 * Active: (true)
+
+## About the web console for administrator
+
+You can operate your signage with using web-browser.
+
+To enable this function, please make following variables to the environment variable on Heroku.
+
+* *VM_SIGNAGE_AUTH_USERNAME*: Username for authentication
+* *VM_SIGNAGE_AUTH_PASSWORD*: Password for authentication
+
+Now you can access to web console:
+https://example.herokuapp.com/admin
+
+## About the general webhook
+
+You can use a general webhook to the control-server.
+This webhook receiver allows reload the signage when an any events was occurred.
+
+To enable this function,
+Please set any keyword to the VM_SIGNAGE_WEBHOOK_KEY of the environment variable on Heroku.
+
+Then, set to call an url which like follows in your any systems:
+https://example.com/herokuapp.com/webhook-receiver?key=abcdefg&cmd=restart
+
+* *key* is the same as value of VM_SIGNAGE_WEBHOOK_KEY.
+* *cmd* is command. In current version, available command is "restart" only.
 
 ## Hints
 
@@ -169,6 +202,18 @@ And add some @xset lines.
 	@xset s off
 	@xset -dpms
 	@xset s noblank
+
+### How to hide the mouse cursor
+
+Firstly, please run the following command on Raspberry Pi:
+
+	$ sudo apt-get install unclutter
+
+Then, add the following line to this file:
+
+*/etc/xdg/lxsession/LXDE/autostart*
+
+	unclutter -idle 5
 
 ### How to customize multiple signage devices
 

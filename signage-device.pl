@@ -14,6 +14,7 @@ our @CHROMIUM_OPTIONS = qw|
 --disable-new-tab-first-run
 --disable-restore-session-state
 --disk-cache-dir=/dev/null
+--disable-translate
 --incognito
 |;
 
@@ -130,7 +131,7 @@ sub read_configs {
 # Check an configuration
 sub check_configs {
 	if (defined $config{control_server_ws_url} || defined $config{git_cloned_dir_path}) {
-		my @param_names = qw/ control_server_ws_url git_cloned_dir_path git_repo_name git_branch_name git_bin_path /;
+		my @param_names = qw/ git_cloned_dir_path git_repo_name git_branch_name git_bin_path /;
 		foreach (@param_names) {
 			if (!defined $config{$_}) {
 				log_e("Config - $_ undefined", 1);
@@ -322,6 +323,25 @@ sub kill_signage_browser {
 		} else {
 			my $res = `$cmd`;
 			log_i($res);
+		}
+	}
+
+	# Delete browser sessions
+	log_i("Deleting browser sessions...");
+	my $browser_name = 'chromium';
+	if ($config{chromium_bin_path} =~ /google\-chrome/) {
+		$browser_name = 'google-chrome';
+	}
+	my @dirs = ($ENV{HOME}.'/.config', $ENV{HOME}.'/.cache');
+	foreach my $dir (@dirs) {
+		if (-d "${dir}/${browser_name}") {
+			my $cmd = 'rm ' . ${dir} . '/' . ${browser_name} .' -r -f';
+			if (defined $config{is_debug}) {
+				log_i("DEBUG - $cmd");
+			} else {
+				my $res = `$cmd`;
+				log_i($res);
+			}
 		}
 	}
 }
