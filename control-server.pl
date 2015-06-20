@@ -202,13 +202,13 @@ EOF
 	$s->render(text => "OK:${cmd}");
 };
 
-# Administrator console
+# Web console for administrators
 any '/admin' => sub {
 	my $s = shift;
 
 	if (!defined $ENV{VM_SIGNAGE_AUTH_USERNAME} || !defined $ENV{VM_SIGNAGE_AUTH_PASSWORD}) {
 		my $msg = <<EOF;
-For using administrator area,
+For using web console,
 You must defined VM_SIGNAGE_AUTH_USERNAME and VM_SIGNAGE_AUTH_PASSWORD on Environment variables.
 EOF
 		$s->render(text => $msg, status => 400);
@@ -237,7 +237,7 @@ EOF
 	$s->render(template => 'admin');
 };
 
-# WebSocket endpoint for administrator console
+# WebSocket endpoint for web console
 websocket '/admin/ws/:wsKey' => sub {
 	my $s = shift;
 
@@ -333,12 +333,21 @@ __DATA__
 <!DOCTYPE html>
 <html>
 	<head>
-		<title>vm-signage</title>
+		<title>VM-Signage Web Console</title>
 		%= javascript '/mojo/jquery/jquery.js'
 		<script>
 			var WS_KEY = '<%= stash 'ws_key' %>';
 		</script>
 		%= javascript '/js/admin.js'
+		<style>
+			#deviceList .device-caption a {
+				margin-left: 10px;
+			}
+			#deviceList .device-info {
+				font-size: 80%;
+			}
+		}
+		</style>
 	</head>
 	<body>
 		<h1>vm-signage</h1>
