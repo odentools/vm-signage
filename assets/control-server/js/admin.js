@@ -20,11 +20,25 @@ $(function () {
 			var d = devices[i];
 			var $li = $('<li/>');
 
-			var $name = $('<p/>');
-			$name.text(d.name);
-			$li.append($name);
+			var $caption = $('<p/>');
+			$caption.addClass('device-caption');
+			var $name = $('<span/>');
+			if (d.config != null && d.config.git_branch_name != null) {
+				$name.text(d.name + ' (' + d.config.git_branch_name + ')');
+			} else {
+				$name.text(d.name);
+			}
+			$caption.append($name);
+			if (d.config != null && d.config.signage_page_url != null) {
+				var $page_link = $('<a/>');
+				$page_link.attr('href', d.config.signage_page_url);
+				$page_link.attr('target', '_blank');
+				$page_link.text('ページ');
+				$caption.append($page_link);
+			}
+			$li.append($caption);
 
-			var $info = $('<span/>');
+			var $info = $('<span class="device-info"/>');
 			$info.text(JSON.stringify(d));
 			$li.append($info);
 
