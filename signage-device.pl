@@ -211,6 +211,7 @@ sub connect_server {
 		$tx->send({ json => {
 			cmd => 'set-device-info',
 			device_info => {
+				repo_rev => get_repo_rev(),
 				ip_address => get_ip_address(),
 				config => \%config,
 			},
