@@ -1,0 +1,186 @@
+# vm-signage
+A simple digital signage kit for Raspberry Pi 1 or 2 (with Raspbian).
+
+[CI] mugifly's vm-signage/master: [![Build Status](https://secure.travis-ci.org/mugifly/vm-signage.png?branch=master)](http://travis-ci.org/mugifly/vm-signage)
+
+## About Components
+
+This kit is composed with 2 components.
+
+### Signage-device script
+
+The signage-device script will be used by deployed on your Raspberry Pi.
+It makes the Raspberry Pi metamorphoses into an digital-signage device.
+
+In the case of normally, the Raspberry Pi should be connecting with any HDMI display or VGA display.
+
+### Control-server script
+
+The control-server script will be used by deployed on [Heroku](https://www.heroku.com/) or your any server.
+
+The control-server allows auto updating of signage when your any repository has pushed.
+However, whether to use of this function is optional;
+If you won't use it, you don't need to use the control-server.
+
+## About Files
+* Procfile - File for control-server (for deploying to Heroku)
+* control-server.pl - Control-server script
+* cpanfile - Definition of dependent modules
+* signage-device.pl - Signage-device script (for Raspberry Pi)
+
+## Quick Installation
+
+If you want to quickly make a digital-signage,
+that's enough only to run the [Step.4](#installation-rpi) of Installation steps on your Raspberry Pi.
+
+In addition, please attention to followings:
+* About configuration-file (config/signage-device.conf):
+    * *control_server_ws_url* and *git_cloned_dir_path* parameter should be empty (*undef*).
+* About repository URL:
+    * The *YOURNAME* part should be replace to "mugifly"; e.g., https://github.com/mugifly/vm-signage.git
+
+Let turn on your Raspberry Pi!
+
+## Installation
+
+### 1. Forking of Repository
+
+If you will customize this kit, firstlly, You should fork the repository from upstream (https://github.com/mugifly/vm-signage).
+If you don't have GitHub account, please make the account OR use [Quick Installation](#quick-installation).
+
+### 2. Git-clone and Making of Branch <a name="installation-gitclone"></a>
+
+To easier customizing, You should make a new branch.
+It will be also easier merging from upstream repository.
+
+Please run the following commands on your computer:
+
+    $ git clone https://github.com/YOURNAME/vm-signage.git
+    $ cd vm-signage/
+    $ git checkout -b my-signage
+    $ git push origin my-signage
+
+When you customize this kit, you should make a customizing into this *my-signage* branch.
+
+(TIPS: You can customize multiple signage devices by making branches for each. Please see [Hints](#hints) section for details.)
+
+### 3. Deployment of Control-server on Heroku
+
+Firstly, signup on the [Heroku](https://www.heroku.com/).
+And install the [Heroku Toolbelt](https://toolbelt.heroku.com/) on your computer.
+
+Then please run the following commands on the cloned directory by Step.2:
+
+    $ heroku create --buildpack https://github.com/kazeburo/heroku-buildpack-perl-procfile.git
+    $ git push heroku master
+    $ heroku open
+    $ heroku addons:add rediscloud
+
+The control-server uses the [RedisCloud](https://addons.heroku.com/rediscloud#25) as a free plan, to persist datas.
+
+### 4. Installation of Signage-device on Raspberry Pi <a name="installation-rpi"></a>
+
+Firstly, run the following commands on your Raspberry Pi:
+
+    $ sudo apt-get install perl git chromium x11-xserver-utils
+    $ sudo cpan install Carton
+    $ cd ~
+    $ git clone https://github.com/YOURNAME/vm-signage.git
+    $ cd vm-signage/
+    $ carton install
+
+(NOTE: If connected network needed a proxy to access WAN, you should run the command  that like follows before above commands: $ export http_proxy="http://proxy.example.com:8080". Then when the run the sudo command, you might want to add -E option.)
+
+Then, make a script file as follows: *start.sh*
+
+````bash
+#!/bin/bash
+cd ~/vm-signage
+carton exec -- perl signage-device.pl
+````
+
+Then, make a configuration-file as follows: *config/signage-device.conf*
+
+````perl
+{
+	# Startup (Optional)
+	startup_wait_sec => 5, # Or undef
+
+	# Signage browser
+	chromium_bin_path => 'chromium',
+	signage_page_url => 'http://example.com/',
+
+	# Proxy (Optional)
+	http_proxy => 'http://proxy.example.com:8080', # Or undef
+
+	# Control server (Optional; Websocket URL of deployed server)
+	control_server_ws_url => 'wss://example.herokuapp.com/', # Or undef
+
+	# Auto updating with using Git (Optional)
+	git_cloned_dir_path => '/home/pi/vm-signage/', # Or undef
+	git_repo_name => 'origin',
+	git_branch_name => 'my-signage',
+	git_bin_path => '/usr/bin/git',
+
+	# Sleep of display (Optional)
+	sleep_begin_time => '21:59', # Or undef
+	sleep_end_time => '07:00', # Or undef
+}
+````
+
+(NOTE: If you won't use control-server, these parameters should be set the undef: "control_server_ws_url", "git_cloned_dir_path".)
+
+After that, add the following line into the LXDE autostart file: *~/.config/lxsession/LXDE-pi/autostart*
+
+````text
+@/bin/bash ~/vm-signage/start.sh
+````
+
+Finally, You must reboot the Raspberry Pi.
+
+    $ sudo shutdown -r now
+
+### 5. Add Webhook on GitHub
+
+To auto updating signage when any your any repository was pushed,
+please register the following settings on the "Webhook" section of "Settings - Webhooks & Services" page of the forked repository on GitHub.
+
+* Payload URL: https://example.herokuapp.com/github-webhook-receiver
+* Content type: application/json
+* Secret: (empty)
+* Which events would you like to trigger this webhook?: Just the push event
+* Active: (true)
+
+## Hints
+
+### How to disable sleeping of the HDMI display
+
+Please edit following files.
+
+In the line that begin from @xscreensaver should be commented out.
+And add some @xset lines.
+
+*/etc/xdg/lxsession/LXDE/autostart*
+
+    #@xscreensaver -no-splash
+
+*/etc/xdg/lxsession/LXDE-pi/autostart*
+
+    #@xscreensaver -no-splash
+    @xset s off
+    @xset -dpms
+    @xset s noblank
+
+### How to hide a mouse cursor
+
+    $ sudo apt-get install unclutter
+
+### How to customize multiple signage devices
+
+Under construction...
+
+## License
+
+Copyright (C) 2015 Masanori Ohgita (http://ohgita.info/).
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License version 3 (GPL v3).
