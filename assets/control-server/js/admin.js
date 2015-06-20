@@ -21,7 +21,11 @@ $(function () {
 			var $li = $('<li/>');
 
 			var $name = $('<p/>');
-			$name.text(d.name);
+			if (d.config != null && d.git_branch_name != null) {
+				$name.text(d.name + ' (' + d.git_branch_name + ')');
+			} else {
+				$name.text(d.name);
+			}
 			$li.append($name);
 
 			var $info = $('<span/>');
