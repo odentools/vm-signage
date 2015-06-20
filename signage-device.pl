@@ -258,14 +258,14 @@ sub connect_server {
 				my $local_rev = get_repo_rev();
 				if (defined $hash->{repo_revs}->{$repo_name}) {
 					my $remote_rev = $hash->{repo_revs}->{$repo_name};
-					log_i("local = $local_rev, remote = $hash->{repo_rev}");
+					log_i("local = $local_rev, remote = $remote_rev");
 					if ($remote_rev ne $local_rev) {
 						log_i("Repository was old: $local_rev");
 						# Update repository
 						update_repo();
 						$local_rev = get_repo_rev();
-						if ($hash->{repo_rev} ne $local_rev) {
-							log_i("Git working directory has updated; But both were different: $local_rev <> $hash->{repo_rev}");
+						if ($remote_rev ne $local_rev) {
+							log_i("Git working directory has updated; But both were different: $local_rev <> $remote_rev");
 							return;
 						}
 						# Restart myself
