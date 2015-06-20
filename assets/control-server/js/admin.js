@@ -31,7 +31,9 @@ $(function () {
 			$caption.append($name);
 			if (d.config != null && d.config.signage_page_url != null) {
 				var $page_link = $('<a/>');
-				$page_link.attr('href', d.config.signage_page_url);
+				var url = d.config.signage_page_url;
+				url = url.replace(/\\\#/g, '#');
+				$page_link.attr('href', url);
 				$page_link.attr('target', '_blank');
 				$page_link.text('ページ');
 				$caption.append($page_link);
