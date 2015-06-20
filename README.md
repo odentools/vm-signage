@@ -157,6 +157,18 @@ please register the following settings on the "Webhook" section of "Settings - W
 * Which events would you like to trigger this webhook?: Just the push event
 * Active: (true)
 
+## About the web console for administrator
+
+You can operate your signage with using web-browser.
+
+To enable this function, please make following variables to the environment variable on Heroku.
+
+* VM_SIGNAGE_AUTH_USERNAME: Username for authentication
+* VM_SIGNAGE_AUTH_PASSWORD: Password for authentication
+
+Now you can access to web console:
+https://example.com/herokuapp.com/admin
+
 ## About the general webhook
 
 You can use a general webhook to the control-server.
@@ -166,7 +178,7 @@ To enable this function,
 Please set any keyword to the VM_SIGNAGE_WEBHOOK_KEY of the environment variable on Heroku.
 
 Then, set to call an url which like follows in your any systems:
-http://example.com/herokuapp.com/webhook-receiver?key=abcdefg&cmd=restart
+https://example.com/herokuapp.com/webhook-receiver?key=abcdefg&cmd=restart
 
 * *key* is the same as value of VM_SIGNAGE_WEBHOOK_KEY.
 * *cmd* is command. In current version, available command is "restart" only.
