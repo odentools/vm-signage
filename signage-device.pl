@@ -14,6 +14,7 @@ our @CHROMIUM_OPTIONS = qw|
 --disable-new-tab-first-run
 --disable-restore-session-state
 --disk-cache-dir=/dev/null
+--disable-translate
 --incognito
 |;
 
@@ -60,6 +61,7 @@ $fc->run(
 # Connect to control server with using WebSocket
 our $ua = undef;
 our $webSocketTx = undef;
+our $pingReceivedAt = -1;
 connect_server();
 
 # Prepare for display sleeping
@@ -80,6 +82,15 @@ if (defined $config{is_test}) { # Test mode
 # Define main loop
 my $is_sleeping = -1; # This flag may be reset by restarting of script
 my $id = Mojo::IOLoop->recurring(10 => sub {
+	my $now = time();
+	if ($pingReceivedAt != -1 && 60 < ($now - $pingReceivedAt)) { # If not received ping in 60 sec
+		log_i("Not received a ping during 60 seconds");
+		$webSocketTx = undef;
+		# Restart myself
+		wait_sec(10);
+		restart_myself();
+	}
+
 	my $now_s = int(Time::Piece::localtime->strftime('%H%M'));
 	if ($sleep_begin_time != 0 && (
 		($sleep_begin_time <= $now_s && $now_s < $sleep_end_time) ||
@@ -130,7 +141,7 @@ sub read_configs {
 # Check an configuration
 sub check_configs {
 	if (defined $config{control_server_ws_url} || defined $config{git_cloned_dir_path}) {
-		my @param_names = qw/ control_server_ws_url git_cloned_dir_path git_repo_name git_branch_name git_bin_path /;
+		my @param_names = qw/ git_cloned_dir_path git_repo_name git_branch_name git_bin_path /;
 		foreach (@param_names) {
 			if (!defined $config{$_}) {
 				log_e("Config - $_ undefined", 1);
@@ -200,6 +211,7 @@ sub connect_server {
 		$tx->send({ json => {
 			cmd => 'set-device-info',
 			device_info => {
+				ip_address => get_ip_address(),
 				config => \%config,
 			},
 		}});
@@ -214,6 +226,7 @@ sub connect_server {
 			my ($tx, $hash) = @_;
 
 			if ($hash->{cmd} eq 'device-ping') { # On ping received
+				$pingReceivedAt = time();
 				return;
 
 			} elsif ($hash->{cmd} eq 'restart') { # Restart request
@@ -245,14 +258,14 @@ sub connect_server {
 				my $local_rev = get_repo_rev();
 				if (defined $hash->{repo_revs}->{$repo_name}) {
 					my $remote_rev = $hash->{repo_revs}->{$repo_name};
-					log_i("local = $local_rev, remote = $hash->{repo_rev}");
+					log_i("local = $local_rev, remote = $remote_rev");
 					if ($remote_rev ne $local_rev) {
 						log_i("Repository was old: $local_rev");
 						# Update repository
 						update_repo();
 						$local_rev = get_repo_rev();
-						if ($hash->{repo_rev} ne $local_rev) {
-							log_i("Git working directory has updated; But both were different: $local_rev <> $hash->{repo_rev}");
+						if ($remote_rev ne $local_rev) {
+							log_i("Git working directory has updated; But both were different: $local_rev <> $remote_rev");
 							return;
 						}
 						# Restart myself
@@ -324,6 +337,49 @@ sub kill_signage_browser {
 			log_i($res);
 		}
 	}
+
+	# Delete browser sessions
+	log_i("Deleting browser sessions...");
+	my $browser_name = 'chromium';
+	if ($config{chromium_bin_path} =~ /google\-chrome/) {
+		$browser_name = 'google-chrome';
+	}
+	my @dirs = ($ENV{HOME}.'/.config', $ENV{HOME}.'/.cache');
+	foreach my $dir (@dirs) {
+		if (-d "${dir}/${browser_name}") {
+			my $cmd = 'rm ' . ${dir} . '/' . ${browser_name} .' -r -f';
+			if (defined $config{is_debug}) {
+				log_i("DEBUG - $cmd");
+			} else {
+				my $res = `$cmd`;
+				log_i($res);
+			}
+		}
+	}
+}
+
+# Get ip address
+sub get_ip_address {
+	my $res = `ip addr show`;
+	if (!defined $res || $res eq '') {
+		return undef;
+	}
+
+	my @lines = split(/\n/, $res);
+	foreach my $line (@lines) {
+		my $ip = undef;
+		if ($line =~ /(\d+\.\d+\.\d+\.\d+)/g) {
+			$ip = $1;
+		}
+
+		if (!defined $ip || $ip eq '127.0.0.1' || $ip =~ /\.255$/) {
+			next;
+		}
+
+		return $ip;
+	}
+
+	return undef;
 }
 
 # Get revision of Git repository
@@ -331,6 +387,7 @@ sub get_repo_rev {
 	chdir($config{git_cloned_dir_path});
 	my $rev = `$config{git_bin_path} show -s --format=%H`;
 	chomp($rev);
+	$rev =~ s/[^0-9a-zA-Z]//g;
 	return $rev;
 }
 
