@@ -98,7 +98,7 @@ websocket '/notif' => sub {
 				$s->write_device_log($client_id, $hash->{log_text});
 
 			} elsif ($hash->{cmd} eq 'set-device-info') { # Set of device information
-				foreach my $k (keys %{$deviceClients{$client_id}}) {
+				foreach my $k (keys %{$hash->{device_info}}) {
 					$deviceClients{$client_id}->{$k} = $hash->{device_info}->{$k};
 				}
 
