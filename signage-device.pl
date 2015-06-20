@@ -201,6 +201,7 @@ sub connect_server {
 		$tx->send({ json => {
 			cmd => 'set-device-info',
 			device_info => {
+				ip_address => get_ip_address(),
 				config => \%config,
 			},
 		}});
@@ -344,6 +345,30 @@ sub kill_signage_browser {
 			}
 		}
 	}
+}
+
+# Get ip address
+sub get_ip_address {
+	my $res = `ip addr show`;
+	if (!defined $res || $res eq '') {
+		return undef;
+	}
+
+	my @lines = split(/\n/, $res);
+	foreach my $line (@lines) {
+		my $ip = undef;
+		if ($line =~ /(\d+\.\d+\.\d+\.\d+)/g) {
+			$ip = $1;
+		}
+
+		if (!defined $ip || $ip eq '127.0.0.1' || $ip =~ /\.255$/) {
+			next;
+		}
+
+		return $ip;
+	}
+
+	return undef;
 }
 
 # Get revision of Git repository
