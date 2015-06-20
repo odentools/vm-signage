@@ -14,6 +14,7 @@ our @CHROMIUM_OPTIONS = qw|
 --disable-new-tab-first-run
 --disable-restore-session-state
 --disk-cache-dir=/dev/null
+--disable-translate
 --incognito
 |;
 
@@ -130,7 +131,7 @@ sub read_configs {
 # Check an configuration
 sub check_configs {
 	if (defined $config{control_server_ws_url} || defined $config{git_cloned_dir_path}) {
-		my @param_names = qw/ control_server_ws_url git_cloned_dir_path git_repo_name git_branch_name git_bin_path /;
+		my @param_names = qw/ git_cloned_dir_path git_repo_name git_branch_name git_bin_path /;
 		foreach (@param_names) {
 			if (!defined $config{$_}) {
 				log_e("Config - $_ undefined", 1);
@@ -200,6 +201,7 @@ sub connect_server {
 		$tx->send({ json => {
 			cmd => 'set-device-info',
 			device_info => {
+				ip_address => get_ip_address(),
 				config => \%config,
 			},
 		}});
@@ -324,6 +326,49 @@ sub kill_signage_browser {
 			log_i($res);
 		}
 	}
+
+	# Delete browser sessions
+	log_i("Deleting browser sessions...");
+	my $browser_name = 'chromium';
+	if ($config{chromium_bin_path} =~ /google\-chrome/) {
+		$browser_name = 'google-chrome';
+	}
+	my @dirs = ($ENV{HOME}.'/.config', $ENV{HOME}.'/.cache');
+	foreach my $dir (@dirs) {
+		if (-d "${dir}/${browser_name}") {
+			my $cmd = 'rm ' . ${dir} . '/' . ${browser_name} .' -r -f';
+			if (defined $config{is_debug}) {
+				log_i("DEBUG - $cmd");
+			} else {
+				my $res = `$cmd`;
+				log_i($res);
+			}
+		}
+	}
+}
+
+# Get ip address
+sub get_ip_address {
+	my $res = `ip addr show`;
+	if (!defined $res || $res eq '') {
+		return undef;
+	}
+
+	my @lines = split(/\n/, $res);
+	foreach my $line (@lines) {
+		my $ip = undef;
+		if ($line =~ /(\d+\.\d+\.\d+\.\d+)/g) {
+			$ip = $1;
+		}
+
+		if (!defined $ip || $ip eq '127.0.0.1' || $ip =~ /\.255$/) {
+			next;
+		}
+
+		return $ip;
+	}
+
+	return undef;
 }
 
 # Get revision of Git repository
