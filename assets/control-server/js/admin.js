@@ -31,10 +31,15 @@ $(function () {
 			if (d.config != null && d.config.signage_page_url != null) {
 				var $page_link = $('<a/>');
 				$page_link.attr('href', d.config.signage_page_url);
+				$page_link.attr('target', '_blank');
+				$page_link.text('ページ');
 				$li.append($page_link);
 			}
 
-			var $info = $('<span/>');
+			var $br = $('</br>');
+			$li.append($br);
+
+			var $info = $('<span class="device-info"/>');
 			$info.text(JSON.stringify(d));
 			$li.append($info);
 

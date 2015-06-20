@@ -339,6 +339,12 @@ __DATA__
 			var WS_KEY = '<%= stash 'ws_key' %>';
 		</script>
 		%= javascript '/js/admin.js'
+		<style>
+			#deviceList .device-info {
+				font-size: 80%;
+			}
+		}
+		</style>
 	</head>
 	<body>
 		<h1>vm-signage</h1>
