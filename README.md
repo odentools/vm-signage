@@ -43,12 +43,12 @@ Let turn on your Raspberry Pi!
 
 ## Installation
 
-### 1. Forking of Repository
+### 1. Forking the repository
 
 If you will customize this kit, firstlly, You should fork the repository from upstream (https://github.com/mugifly/vm-signage).
 If you don't have GitHub account, please make the account OR use [Quick Installation](#quick-installation).
 
-### 2. Git-clone and Making of Branch <a name="installation-gitclone"></a>
+### 2. Git-clone and making a branch <a name="installation-gitclone"></a>
 
 To easier customizing, You should make a new branch.
 It will be also easier merging from upstream repository.
@@ -163,11 +163,11 @@ You can operate your signage with using web-browser.
 
 To enable this function, please make following variables to the environment variable on Heroku.
 
-* VM_SIGNAGE_AUTH_USERNAME: Username for authentication
-* VM_SIGNAGE_AUTH_PASSWORD: Password for authentication
+* *VM_SIGNAGE_AUTH_USERNAME*: Username for authentication
+* *VM_SIGNAGE_AUTH_PASSWORD*: Password for authentication
 
 Now you can access to web console:
-https://example.com/herokuapp.com/admin
+https://example.herokuapp.com/admin
 
 ## About the general webhook
 
