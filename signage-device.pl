@@ -110,9 +110,9 @@ my $id = Mojo::IOLoop->recurring(10 => sub {
 			# End display sleeping
 			$is_sleeping = 0;
 			set_display_power(1);
-			# Restart browser
-			kill_signage_browser();
-			start_signage_browser();
+			# Restart myself
+			wait_sec(10);
+			restart_myself();
 		}
 	}
 });
@@ -410,8 +410,15 @@ sub update_repo {
 	}
 
 	# Update of dependent libraries
-	log_i("Updating dependent libraries...");
-	update_libs();
+	my $diff_cpanfile = `$config{git_bin_path} diff HEAD~1 cpanfile`;
+	chomp($diff_cpanfile);
+	if ($diff_cpanfile =~ /cpanfile/) {
+		log_i("Detected updates of cpanfile");
+		log_i("Updating dependent libraries...");
+		update_libs();
+	} else {
+		log_i("Not detected updates of cpanfile");
+	}
 
 	# Self-test
 	if (!test_myself()) {
@@ -550,6 +557,13 @@ sub log_i {
 	my $now = time();
 	my $line = "[INFO:$now:$$]  $mes";
 
+	# Output message
+	if (!defined $opt_no_break_line || !$opt_no_break_line) {
+		print $line . "\n";
+	} else {
+		print $line;
+	}
+
 	# Logging on server
 	if (defined $config{is_control_server_logging} && defined $webSocketTx) {
 		eval {
@@ -560,13 +574,6 @@ sub log_i {
 		}; if ($@) {
 			print "[ERROR:$now] WebSocket error - $@\n";
 		}
-	}
-
-	# Output message
-	if (!defined $opt_no_break_line || !$opt_no_break_line) {
-		print $line . "\n";
-	} else {
-		print $line;
 	}
 }
 
